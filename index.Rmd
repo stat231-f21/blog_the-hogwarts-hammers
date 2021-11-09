@@ -1,6 +1,6 @@
 ---
-title: "Your Project Title Here"
-author: "Your Names Here"
+title: "Suicide"
+author: "Victoria Kuntz and Rohil Bathija"
 date: "Add a date"
 output:
   rmdformats::readthedown:
@@ -42,20 +42,14 @@ You should test out updating your GitHub Pages website:
 
 You can embed code as normal, for example:
 
-```{r cars}
-summary(cars)
+```{r reading-data, eval = FALSE}
+MHHospitals <- read_csv("data/MentalHealthHospitalsByCountry.csv")
+suicideRate <- read_csv("data/SuicideRatesByCountry.csv")
+sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv")
 ```
 
-Let's clean up the format of that output instead of using the standard R output:
+```{r wrangling}
 
-```{r pretty-table, echo = TRUE}
-summary(cars) %>%
-  kable(col.names = c("Speed", "Distance"),
-        row.names = FALSE) %>%
-  kable_styling(bootstrap_options = "striped",
-                full_width = FALSE) %>%
-  row_spec(0, bold = TRUE) %>%
-  column_spec(1:2, width = "1.5in") 
 ```
 
 In a study from the 1920s, fifty cars were used to see how the speed of the car and the distance taken to stop were related.  Speeds ranged between `r min(cars$speed)` and `r max(cars$speed)` mph.  Distances taken to stop ranged between `r min(cars$dist)` and `r max(cars$dist)` feet, with the middle 50% falling between `r as.numeric(quantile(cars$dist)[2])` and `r as.numeric(quantile(cars$dist)[4])` feet.  
@@ -63,13 +57,7 @@ In a study from the 1920s, fifty cars were used to see how the speed of the car 
 You can also embed plots as normal, for example:
 
 ```{r figure1}
-ggplot(data = cars, aes(x = speed, y = dist)) + 
-  geom_point() + 
-  labs(x = "Speed of car (mph)",
-       y = "Distance taken to stop (ft)",
-       title = "Stopping distance increases with faster speeds",
-       subtitle = "Based on 1920s study") +
-  theme_classic()
+
 ```
 
 Take note of the default code chunk options in the `setup` code chunk, and adjust individual code chunk options as needed. for example, unlike the rest of the Rmd files we worked in this semester, the default code chunk option is `echo = FALSE`, so you will need to set `echo  = TRUE` for any code chunks you would like to display in the blog. 
