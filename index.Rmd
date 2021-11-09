@@ -44,7 +44,7 @@ You should test out updating your GitHub Pages website:
 
 You can embed code as normal, for example:
 
-```{r reading-data, eval = FALSE}
+```{r reading-data, eval = TRUE}
 MHHospitals <- read_csv("data/MentalHealthHospitalsByCountry.csv", show_col_types = FALSE)
 suicideRate <- read_csv("data/SuicideRatesByCountry.csv", show_col_types = FALSE)
 sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv", show_col_types = FALSE)
