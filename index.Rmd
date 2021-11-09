@@ -10,7 +10,9 @@ output:
 
 ```{r setup, include = FALSE}
 library(tidyverse)
-library(kableExtra) # for example code; delete if not needed
+library(kableExtra)
+library(viridis)
+# for example code; delete if not needed
 
 # Set code chunk defaults 
 knitr::opts_chunk$set(echo = FALSE, 
@@ -43,15 +45,48 @@ You should test out updating your GitHub Pages website:
 You can embed code as normal, for example:
 
 ```{r reading-data, eval = FALSE}
-MHHospitals <- read_csv("data/MentalHealthHospitalsByCountry.csv")
-suicideRate <- read_csv("data/SuicideRatesByCountry.csv")
-sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv")
+MHHospitals <- read_csv("data/MentalHealthHospitalsByCountry.csv", show_col_types = FALSE)
+suicideRate <- read_csv("data/SuicideRatesByCountry.csv", show_col_types = FALSE)
+sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv", show_col_types = FALSE)
+suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
+  rename(id = "STATE")
 ```
 
 ```{r wrangling}
 
 ```
 
+```{r usMap}
+data(state)
+state_info <- data.frame(Region = state.region,
+                         # Match state variable name in map data
+                         state = tolower(state.name), 
+                         # Match state variable name in summary data
+                         id = state.abb)
+SuicideState <- suicideState %>%
+  left_join(state_info, by = "id") %>%
+  filter(YEAR == "2019") %>%
+  select(c("YEAR", "id", "RATE", "DEATHS", "Region.x.x", "state.x.x")) %>%
+  rename(region = "Region.x.x", state = "id", id = "state.x.x")
+rename(state_info, id = "state", state = "id")
+state_map <- maps::map("state",plot = FALSE, fill = TRUE) %>% 
+  st_as_sf()%>%
+  rename(id = "ID")
+
+graphs_map <- state_map %>% 
+  left_join(state_info, by = "id") %>%
+  left_join(SuicideState, by = "id")
+
+ggplot(graphs_map, aes(fill = DEATHS)) +
+ geom_sf() +
+  scale_fill_viridis(option = "magma", direction = -1)
+  theme_void()
+  
+ggplot(graphs_map, aes(fill = RATE)) +
+ geom_sf() +
+  scale_fill_viridis(option = "magma", direction = -1)
+  theme_void()
+```
 In a study from the 1920s, fifty cars were used to see how the speed of the car and the distance taken to stop were related.  Speeds ranged between `r min(cars$speed)` and `r max(cars$speed)` mph.  Distances taken to stop ranged between `r min(cars$dist)` and `r max(cars$dist)` feet, with the middle 50% falling between `r as.numeric(quantile(cars$dist)[2])` and `r as.numeric(quantile(cars$dist)[4])` feet.  
 
 You can also embed plots as normal, for example:
