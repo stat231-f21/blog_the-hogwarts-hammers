@@ -12,6 +12,8 @@ output:
 library(tidyverse)
 library(kableExtra)
 library(viridis)
+library(rnaturalearth)
+library(rnaturalearthdata)
 # for example code; delete if not needed
 
 # Set code chunk defaults 
@@ -51,11 +53,48 @@ sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv", show_co
 suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
   rename(id = "STATE")
 ```
-
+#VIETTA
 ```{r wrangling}
+# make the year a column as opposed to a column header
+suicideRateByYear <- suicideRate %>% 
+  pivot_longer(cols = starts_with("20"), names_to = "Year", values_to = "RateWithRange") %>%
+  # splitting the rate and the range into separate columns
+  mutate(Rate = as.numeric(gsub(" .*$","",RateWithRange)), Range = gsub("^.* ", "", RateWithRange))
+# calculating gender ratio of suicide rates
+maleSuicideRate <- suicideRateByYear %>%
+  filter(suicideRateByYear$Sex == 'Male') %>%
+  select(Country, Year, Rate) %>%
+  rename(MaleRate = Rate)
+
+femaleSuicideRate <- suicideRateByYear %>%
+  filter(suicideRateByYear$Sex == 'Female') %>%
+  select(Country, Year, Rate) %>%
+  rename(FemaleRate = Rate)
+
+suicideRateCompare <- maleSuicideRate %>%
+  left_join(femaleSuicideRate) %>%
+  mutate(Ratio = MaleRate / FemaleRate)
+```
+
+```{r worldMap}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+suicideRate2019 <- suicideRateCompare %>%
+  filter(suicideRateCompare$Year == '2019') %>%
+  select(Country, Ratio) %>%
+  rename(name = Country)
+
+worldRates <- world %>%
+  left_join(suicideRate2019)
+
+ggplot(data = worldRates, aes(fill = Ratio))+
+  geom_sf()
 
 ```
 
+
+
+#ROHIL
+##Map of suicide by state
 ```{r usMap}
 data(state)
 state_info <- data.frame(Region = state.region,
