@@ -14,6 +14,8 @@ library(kableExtra)
 library(viridis)
 library(rnaturalearth)
 library(rnaturalearthdata)
+library(sf)
+library(plotly)
 # for example code; delete if not needed
 
 # Set code chunk defaults 
@@ -78,18 +80,27 @@ suicideRateCompare <- maleSuicideRate %>%
 
 ```{r worldMap}
 world <- ne_countries(scale = "medium", returnclass = "sf")
-suicideRate2019 <- suicideRateCompare %>%
-  filter(suicideRateCompare$Year == '2019') %>%
+suicideRate2017 <- suicideRateCompare %>%
+  filter(suicideRateCompare$Year == '2017') %>%
   select(Country, Ratio) %>%
   rename(name = Country)
 
-worldRates <- world %>%
-  left_join(suicideRate2019)
+worldRates <- world%>%
+  left_join(suicideRate2017)
 
-ggplot(data = worldRates, aes(fill = Ratio))+
-  geom_sf()
+p <- ggplot(data = worldRates, aes(fill = Ratio, text = paste("Country: ", name))) +
+  geom_sf(size=.2, colour="white") +
+#  scale_color_gradient2(midpoint=1, low="blue", mid="grey", high="red")
+  scale_fill_viridis_c(option = "magma")
+  theme_void()
 
+  ggplotly(p, dynamicTicks = TRUE)
 ```
+
+```{r}
+missingRates <- worldRates %>% filter(is.na(worldRates$Ratio)) %>% select(name)
+```
+
 
 
 
@@ -102,19 +113,18 @@ state_info <- data.frame(Region = state.region,
                          state = tolower(state.name), 
                          # Match state variable name in summary data
                          id = state.abb)
-SuicideState <- suicideState %>%
+SuicideStateWithInfo <- suicideState %>%
   left_join(state_info, by = "id") %>%
   filter(YEAR == "2019") %>%
-  select(c("YEAR", "id", "RATE", "DEATHS", "Region.x.x", "state.x.x")) %>%
-  rename(region = "Region.x.x", state = "id", id = "state.x.x")
+  select(c("YEAR", "id", "RATE", "DEATHS", "Region", "state")) %>%
+  rename(region = "Region", state = "id", id = "state")
 rename(state_info, id = "state", state = "id")
 state_map <- maps::map("state",plot = FALSE, fill = TRUE) %>% 
   st_as_sf()%>%
   rename(id = "ID")
 
 graphs_map <- state_map %>% 
-  left_join(state_info, by = "id") %>%
-  left_join(SuicideState, by = "id")
+  left_join(SuicideStateWithInfo, by = "id")
 
 ggplot(graphs_map, aes(fill = DEATHS)) +
  geom_sf() +
