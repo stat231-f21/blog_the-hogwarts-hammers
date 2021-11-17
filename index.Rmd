@@ -91,8 +91,10 @@ worldRates <- world%>%
 p <- ggplot(data = worldRates, aes(fill = Ratio, text = paste("Country: ", name))) +
   geom_sf(size=.2, colour="white") +
 #  scale_color_gradient2(midpoint=1, low="blue", mid="grey", high="red")
-  scale_fill_viridis_c(option = "magma")
-  theme_void()
+scale_fill_viridis(option = "magma", 
+                   breaks=c(1, 3, 5, 7, 9, 11), 
+                   name="Ratio of male to female suicide rate", 
+                   guide = guide_legend( keyheight = unit(3, units = "mm"), keywidth=unit(12, units = "mm")) )
 
   ggplotly(p, dynamicTicks = TRUE)
 ```
@@ -101,7 +103,24 @@ p <- ggplot(data = worldRates, aes(fill = Ratio, text = paste("Country: ", name)
 missingRates <- worldRates %>% filter(is.na(worldRates$Ratio)) %>% select(name)
 ```
 
+```{r worldMap}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+suicideRatebyCountry <- suicideRateByYear %>%
+  filter(suicideRateByYear$Year == '2017') %>%
+  select(Country, Rate) %>%
+  rename(name = Country)
 
+worldSuicideRates <- world%>%
+  left_join(suicideRatebyCountry)
+
+p <- ggplot(data = worldSuicideRates, aes(fill = Rate, text = paste("Country: ", name))) +
+  geom_sf(size=.2, colour="white") +
+#  scale_color_gradient2(midpoint=1, low="blue", mid="grey", high="red")
+  scale_fill_viridis_c(option = "magma")
+  theme_void()
+
+  ggplotly(p, dynamicTicks = TRUE)
+```
 
 
 #ROHIL
