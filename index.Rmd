@@ -1,7 +1,7 @@
 ---
-title: "Suicide"
+title: "Suicide Rates Across the World"
 author: "Victoria Kuntz and Rohil Bathija"
-date: "Add a date"
+date: "December 8th 2021"
 output:
   rmdformats::readthedown:
     thumbnails: false
@@ -16,6 +16,7 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(sf)
 library(plotly)
+library(rgeos)
 # for example code; delete if not needed
 
 # Set code chunk defaults 
@@ -145,15 +146,18 @@ state_map <- maps::map("state",plot = FALSE, fill = TRUE) %>%
 graphs_map <- state_map %>% 
   left_join(SuicideStateWithInfo, by = "id")
 
-ggplot(graphs_map, aes(fill = DEATHS)) +
- geom_sf() +
+y <- ggplot(graphs_map, aes(fill = DEATHS, text = paste("State: ", id))) +
+ geom_sf(size=.2, colour="white") +
   scale_fill_viridis(option = "magma", direction = -1)
   theme_void()
+  ggplotly(y, dynamicTicks = TRUE)
   
-ggplot(graphs_map, aes(fill = RATE)) +
- geom_sf() +
+x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
+ geom_sf(size=.2, colour="white") +
   scale_fill_viridis(option = "magma", direction = -1)
   theme_void()
+  #would love for this to work
+  ggplotly(x, dynamicTicks = TRUE)
 ```
 In a study from the 1920s, fifty cars were used to see how the speed of the car and the distance taken to stop were related.  Speeds ranged between `r min(cars$speed)` and `r max(cars$speed)` mph.  Distances taken to stop ranged between `r min(cars$dist)` and `r max(cars$dist)` feet, with the middle 50% falling between `r as.numeric(quantile(cars$dist)[2])` and `r as.numeric(quantile(cars$dist)[4])` feet.  
 
