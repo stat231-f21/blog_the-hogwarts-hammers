@@ -17,16 +17,21 @@ library(rnaturalearthdata)
 library(sf)
 library(plotly)
 library(rgeos)
+library(rgdal)
+library(leaflet)
+library(RColorBrewer)
 # for example code; delete if not needed
 
-# Set code chunk defaults 
-knitr::opts_chunk$set(echo = FALSE, 
-                      mesage = FALSE,
-                      warning = FALSE,
-                      fig.align = "center")
+# Set code chunk defaults
+knitr::opts_chunk$set(
+  echo = FALSE,
+  mesage = FALSE,
+  warning = FALSE,
+  fig.align = "center"
+)
 
 # Set R environment options
-options(knitr.kable.NA = '')
+options(knitr.kable.NA = "")
 ```
 
 # Header 1 (Section heading)
@@ -50,114 +55,230 @@ You should test out updating your GitHub Pages website:
 You can embed code as normal, for example:
 
 ```{r reading-data, eval = TRUE}
-MHHospitals <- read_csv("data/MentalHealthHospitalsByCountry.csv", show_col_types = FALSE)
-suicideRate <- read_csv("data/SuicideRatesByCountry.csv", show_col_types = FALSE)
+MHBeds <- read_csv("data/mental-health-hospital.csv", show_col_types = FALSE)
+suicideRate <- read_csv("data/suicide-death-rates.csv", show_col_types = FALSE)
 sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv", show_col_types = FALSE)
 suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
   rename(id = "STATE")
+maleFemaleRatio <- read_csv("data/Male-Female-Ratio-of-Suicide-Rates.csv")
+leafletData <- readOGR(
+  dsn = paste0(getwd(), "/data/LeafletData"),
+  layer = "TM_WORLD_BORDERS_SIMPL-0.3",
+  verbose = FALSE
+)
 ```
 #VIETTA
 ```{r wrangling}
-# make the year a column as opposed to a column header
-suicideRateByYear <- suicideRate %>% 
-  pivot_longer(cols = starts_with("20"), names_to = "Year", values_to = "RateWithRange") %>%
-  # splitting the rate and the range into separate columns
-  mutate(Rate = as.numeric(gsub(" .*$","",RateWithRange)), Range = gsub("^.* ", "", RateWithRange))
-# calculating gender ratio of suicide rates
-maleSuicideRate <- suicideRateByYear %>%
-  filter(suicideRateByYear$Sex == 'Male') %>%
-  select(Country, Year, Rate) %>%
-  rename(MaleRate = Rate)
+#Rename country codes and years and drop unnecessary columns so that all data sets match
+maleFemaleRatio <- maleFemaleRatio %>%
+  mutate(ISO3 = Code)
+suicideRate <- suicideRate %>%
+  mutate(ISO3 = Code) 
+MHBeds <- MHBeds %>%
+  select('GHO_DISPLAY', 'YEAR', 'COUNTRY_CODE', 'Number_Beds') %>%
+  mutate(ISO3 = COUNTRY_CODE, Year=YEAR)
 
-femaleSuicideRate <- suicideRateByYear %>%
-  filter(suicideRateByYear$Sex == 'Female') %>%
-  select(Country, Year, Rate) %>%
-  rename(FemaleRate = Rate)
+#Pull out different bed metrics into separate data sets
+MHBedsInMHHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == 'Beds in mental hospitals (per 100 000 population)') %>%
+  mutate(BEDS_IN_MENTAL_HOSPITALS = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_MENTAL_HOSPITALS)
+MHBedsInGeneralHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == 'Beds for mental health in general hospitals (per 100 000 population)') %>%
+  mutate(BEDS_IN_GENERAL_HOSPITALS = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_GENERAL_HOSPITALS)
+MHBedsInCommunityHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == 'Beds in community residential facilities (per 100 000 population)') %>%
+  mutate(BEDS_IN_COMMUNITY_FACILITIES = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_COMMUNITY_FACILITIES)
 
-suicideRateCompare <- maleSuicideRate %>%
-  left_join(femaleSuicideRate) %>%
-  mutate(Ratio = MaleRate / FemaleRate)
+#Combine bed data into a single data set and replace NA with 0
+bedData2016 = full_join(MHBedsInMHHospitals, full_join(MHBedsInGeneralHospitals, MHBedsInCommunityHospitals)) %>%
+  replace_na(list(BEDS_IN_MENTAL_HOSPITALS=0, BEDS_IN_GENERAL_HOSPITALS=0, BEDS_IN_COMMUNITY_FACILITIES=0)) %>%
+  mutate(TOTAL_BEDS = BEDS_IN_MENTAL_HOSPITALS + BEDS_IN_GENERAL_HOSPITALS + BEDS_IN_COMMUNITY_FACILITIES) %>%
+  filter(Year==2016)
+
+#Join together all data sets into a single data set for display
+suicideData <- full_join(suicideRate, maleFemaleRatio)
+suicideData <- full_join(suicideData, bedData2016)
+suicideData2016 <- suicideData %>%
+  filter(Year == "2016")
+write_csv(suicideData, 'fullSuicideData.csv')
+maleFemaleRatio2017 <- maleFemaleRatio %>%
+  filter(Year == "2017")
+
+leafletMaleFemaleRatio2017 <- merge(leafletData, maleFemaleRatio2017, by = "ISO3")
+leafletSuicideData2016 <- merge(leafletData, suicideData2016, by = "ISO3")  
+
 ```
 
-```{r worldMap}
-world <- ne_countries(scale = "medium", returnclass = "sf")
-suicideRate2017 <- suicideRateCompare %>%
-  filter(suicideRateCompare$Year == '2017') %>%
-  select(Country, Ratio) %>%
-  rename(name = Country)
+```{r leaflet}
+mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+mypalette <- colorBin(
+  palette = c("#ff0000", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
+  domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
+  na.color = "transparent",
+  bins = mybins
+)
 
-worldRates <- world%>%
-  left_join(suicideRate2017)
+# Prepare the text for tooltips:
+hoverText <- paste(
+  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+  sep = ""
+) %>%
+  lapply(htmltools::HTML)
 
-p <- ggplot(data = worldRates, aes(fill = Ratio, text = paste("Country: ", name))) +
-  geom_sf(size=.2, colour="white") +
-#  scale_color_gradient2(midpoint=1, low="blue", mid="grey", high="red")
-scale_fill_viridis(option = "magma", 
-                   breaks=c(1, 3, 5, 7, 9, 11), 
-                   name="Ratio of male to female suicide rate", 
-                   guide = guide_legend( keyheight = unit(3, units = "mm"), keywidth=unit(12, units = "mm")) )
-
-  ggplotly(p, dynamicTicks = TRUE)
+# Final Map
+leaflet(leafletSuicideData2016) %>%
+  addTiles() %>%
+  setView(lat = 10, lng = 0, zoom = 2) %>%
+  addPolygons(
+    fillColor = ~ mypalette(MaleFemaleSuicideRatio),
+    stroke = TRUE,
+    fillOpacity = 1,
+    color = "white",
+    weight = 1,
+    label = hoverText,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "13px",
+      direction = "auto"
+    )
+  ) %>%
+  addLegend(pal = mypalette, values = ~MaleFemaleSuicideRatio, opacity = 1, title = "Ratio of Male to Female Suicide", position = "bottomleft")
 ```
 
-```{r}
-missingRates <- worldRates %>% filter(is.na(worldRates$Ratio)) %>% select(name)
+
+```{r worldMap2}
+mybins <- c(0, 1, 2, 3, 4, 5, 8, 10, 15, 20, 50, 100)
+mypalette <- colorBin(
+  palette = c("#ffffff", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
+  domain = leafletSuicideData2016@data$SuicideDeathRate,
+  na.color = "transparent",
+  bins = mybins
+)
+
+# Prepare the text for tooltips:
+hoverText <- paste(
+  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+  "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
+  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+  sep = ""
+) %>%
+  lapply(htmltools::HTML)
+
+# Final Map
+leaflet(leafletSuicideData2016) %>%
+  addTiles() %>%
+  setView(lat = 10, lng = 0, zoom = 2) %>%
+  addPolygons(
+    fillColor = ~ mypalette(SuicideDeathRate),
+    stroke = TRUE,
+    fillOpacity = 1,
+    color = "white",
+    weight = 1,
+    label = hoverText,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "13px",
+      direction = "auto"
+    )
+  ) %>%
+  addCircles(lat = leafletSuicideData2016@data$LAT, lng = leafletSuicideData2016@data$LON, weight = 1, opacity = 1, fillOpacity = .5, radius = sqrt(leafletSuicideData2016@data$TOTAL_BEDS) * 20000, color = "#ff77ff") %>%
+  addLegend(pal = mypalette, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft")
 ```
 
-```{r worldMap}
-world <- ne_countries(scale = "medium", returnclass = "sf")
-suicideRatebyCountry <- suicideRateByYear %>%
-  filter(suicideRateByYear$Year == '2017') %>%
-  select(Country, Rate) %>%
-  rename(name = Country)
+```{r worldMap3}
+mybins <- c(0, 1, 2, 3, 4, 5, 8, 10, 15, 20, 50, 100)
+mypaletteDeathRate <- colorBin(
+  palette = c("#ffffff", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
+  domain = leafletSuicideData2016@data$SuicideDeathRate,
+  na.color = "transparent",
+  bins = mybins
+)
 
-worldSuicideRates <- world%>%
-  left_join(suicideRatebyCountry)
+mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
 
-p <- ggplot(data = worldSuicideRates, aes(fill = Rate, text = paste("Country: ", name))) +
-  geom_sf(size=.2, colour="white") +
-#  scale_color_gradient2(midpoint=1, low="blue", mid="grey", high="red")
-  scale_fill_viridis_c(option = "magma")
-  theme_void()
+mypaletteMaleFemale <- colorBin(
+    palette = c("#009900", "#0000ff", "#2200dd", "#4400aa", "#660099", "#880077", "#aa0066", "#bb0055", "#cc0033", "#ee0011", "#ff0000"),
+  domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
+  na.color = "transparent",
+  bins = mybins
+)
+# Prepare the text for tooltips:
+hoverText <- paste(
+  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+  "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
+  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+  sep = ""
+) %>%
+  lapply(htmltools::HTML)
 
-  ggplotly(p, dynamicTicks = TRUE)
+# Final Map
+leaflet(leafletSuicideData2016) %>%
+  addTiles() %>%
+  setView(lat = 30, lng = 0, zoom = 1.6) %>%
+  addPolygons(
+    fillColor = ~ mypaletteDeathRate(SuicideDeathRate),
+    stroke = TRUE,
+    fillOpacity = 0,
+    opacity = 0,
+    color = "black",
+    weight = 1,
+    label = hoverText,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "13px",
+      direction = "auto"
+    )
+  ) %>%
+  addCircles(lat = leafletSuicideData2016@data$LAT, lng = leafletSuicideData2016@data$LON, weight = 1, opacity = 1, fillOpacity = .7, radius = sqrt(leafletSuicideData2016@data$SuicideDeathRate) * 40000, color = "white", fillColor = mypaletteMaleFemale(leafletSuicideData2016@data$MaleFemaleSuicideRatio)) %>%
+#  addLegend(pal = mypaletteDeathRate, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft") %>%
+  addLegend(pal = mypaletteMaleFemale, values = ~MaleFemaleSuicideRatio, opacity = .7, title = "Male Female Ratio", position = "bottomleft")
 ```
+
 
 
 #ROHIL
 ##Map of suicide by state
 ```{r usMap}
 data(state)
-state_info <- data.frame(Region = state.region,
-                         # Match state variable name in map data
-                         state = tolower(state.name), 
-                         # Match state variable name in summary data
-                         id = state.abb)
+state_info <- data.frame(
+  Region = state.region,
+  # Match state variable name in map data
+  state = tolower(state.name),
+  # Match state variable name in summary data
+  id = state.abb
+)
 SuicideStateWithInfo <- suicideState %>%
   left_join(state_info, by = "id") %>%
   filter(YEAR == "2019") %>%
   select(c("YEAR", "id", "RATE", "DEATHS", "Region", "state")) %>%
   rename(region = "Region", state = "id", id = "state")
 rename(state_info, id = "state", state = "id")
-state_map <- maps::map("state",plot = FALSE, fill = TRUE) %>% 
-  st_as_sf()%>%
+state_map <- maps::map("state", plot = FALSE, fill = TRUE) %>%
+  st_as_sf() %>%
   rename(id = "ID")
 
-graphs_map <- state_map %>% 
+graphs_map <- state_map %>%
   left_join(SuicideStateWithInfo, by = "id")
 
 y <- ggplot(graphs_map, aes(fill = DEATHS, text = paste("State: ", id))) +
- geom_sf(size=.2, colour="white") +
+  geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1)
-  theme_void()
-  ggplotly(y, dynamicTicks = TRUE)
-  
+theme_void()
+ggplotly(y, dynamicTicks = TRUE)
+
 x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
- geom_sf(size=.2, colour="white") +
+  geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1)
-  theme_void()
-  #would love for this to work
-  ggplotly(x, dynamicTicks = TRUE)
+theme_void()
+# would love for this to work
+ggplotly(x, dynamicTicks = TRUE)
 ```
 In a study from the 1920s, fifty cars were used to see how the speed of the car and the distance taken to stop were related.  Speeds ranged between `r min(cars$speed)` and `r max(cars$speed)` mph.  Distances taken to stop ranged between `r min(cars$dist)` and `r max(cars$dist)` feet, with the middle 50% falling between `r as.numeric(quantile(cars$dist)[2])` and `r as.numeric(quantile(cars$dist)[4])` feet.  
 
