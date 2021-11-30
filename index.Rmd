@@ -152,9 +152,19 @@ leaflet(leafletSuicideData2016) %>%
 
 
 ```{r worldMap2}
-mybins <- c(0, 1, 2, 3, 4, 5, 8, 10, 15, 20, 50, 100)
-mypalette <- colorBin(
-  palette = c("#ffffff", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
+mybins <- c(0,1,2,5,7,10,12, 15, 20, 25, 30, Inf)
+mypalette <- colorBin( 
+  palette=c("#333399",
+            "#555599", 
+            "#777799",
+            "#999999",
+            "#ffcccc",
+            "#ffaaaa",
+            "#ff9999", 
+            "#ff7777", 
+            "#cc5555",
+            "#aa0000",
+            "#550000"),
   domain = leafletSuicideData2016@data$SuicideDeathRate,
   na.color = "transparent",
   bins = mybins
@@ -187,7 +197,6 @@ leaflet(leafletSuicideData2016) %>%
       direction = "auto"
     )
   ) %>%
-  addCircles(lat = leafletSuicideData2016@data$LAT, lng = leafletSuicideData2016@data$LON, weight = 1, opacity = 1, fillOpacity = .5, radius = sqrt(leafletSuicideData2016@data$TOTAL_BEDS) * 20000, color = "#ff77ff") %>%
   addLegend(pal = mypalette, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft")
 ```
 
