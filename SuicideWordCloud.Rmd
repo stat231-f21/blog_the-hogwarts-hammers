@@ -1,0 +1,91 @@
+---
+title: "Suicide Data"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(htmltools)
+library(tidyRSS)
+library(dplyr)
+library(wordcloud)
+library(wordcloud2)
+library(RColorBrewer)
+library(tm)
+library(stringr)
+```
+```{r}
+365*2
+```
+
+```{r}
+allTitles = data.frame()
+
+# Loop over two day periods in 2014 and 2015 to get all headlines. Google RSS feed is limited to 100
+# headlines, so we will miss articles if we go with longer time periods
+
+startDate <- as.Date('2014-01-01')
+yearCount <- 3
+interval <- 30
+numIntervals = as.integer(yearCount * 365 / interval)
+#searchTerm <- "(mental OR psychiatric) AND hospital AND bed"
+#searchTerm <- "suicide AND mental"
+#searchTerm <- "suicide"
+searchTerm <- "+\"mental health\"+needs"
+wordsToRemove <- c("mental", "health", "psychiatric", "needs", "psych")
+country = "US"
+for (day in 1:numIntervals) {
+  nextDate <- startDate + interval
+  print(paste("Getting articles from", startDate, "to", nextDate))
+  newsUrl = URLencode(paste0("https://news.google.com/rss/search?q=", searchTerm, "+after:", startDate, "+before:", nextDate, "&ceid=", country, "&gl=", country))
+  scrapedTitles <- tryCatch(
+    # Some days have no articles. Handle the error so that the scrape doesn't crash
+    error = function(cnd) {
+        return(NA)
+      },
+    scrapedTitles <- newsUrl %>%
+      tidyfeed() %>%
+      select(item_title)
+  )
+  
+  print(paste("Got ", nrow(scrapedTitles), "articles"))
+  allTitles <- allTitles %>% rbind(scrapedTitles)
+  startDate <- nextDate
+}
+
+
+```
+
+
+```{r}
+# Remove names of sources
+allTitles <- allTitles %>%
+  mutate(item_title = gsub(" *-[^-]*$", "", item_title)) %>%
+  mutate(item_title = gsub(" *\\|.*$", "", item_title))
+```
+
+
+```{r}
+processedTitles <- Corpus(VectorSource(allTitles$item_title)) %>%
+  tm_map(stripWhitespace) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(removeNumbers) %>%
+  tm_map(content_transformer(tolower)) %>%
+  tm_map(removeWords, stopwords("english")) %>%
+  tm_map(removeWords, wordsToRemove)
+  #tm_map(removeWords, c("suicide", "news", "times", "suicides"))
+
+termDocumentMatrix <- TermDocumentMatrix(processedTitles)
+matrix <- as.matrix(termDocumentMatrix)
+words <- sort(rowSums(matrix), decreasing=TRUE)
+wordDataframe <- data.frame(word = names(words), freq=words)
+```
+
+
+```{r}
+wordcloud(words = wordDataframe$word, freq = wordDataframe$freq, min.freq = 1, max.words=100, rot.per=0.35, colors=brewer.pal(8, "Dark2"))
+```
+

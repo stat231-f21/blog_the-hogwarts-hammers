@@ -1,0 +1,58 @@
+---
+title: "SuicideTemperature"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(rworldmap)
+```
+
+```{r}
+suicideDeathRates = read.csv('suicide-death-rates.csv') %>%
+  drop_na() %>%
+  rename(ISO3 = Code)
+```
+
+```{r}
+temperatureData <- read.csv('Country_temperatureCRU-Table 1.csv') %>%
+  mutate(swing = abs(July_Temp - Jan_Temp)) %>%
+  select(ISO_3DIGIT, Annual_temp, swing) %>%
+  rename(ISO3 = ISO_3DIGIT, TEMP = Annual_temp)
+```
+
+```{r}
+deathRateTemperatureData <- left_join(suicideDeathRates, temperatureData)
+deathRateTemperatureData2017 <- deathRateTemperatureData %>%
+  filter(Year == 2017)
+  
+```
+
+```{r}
+ggplot(deathRateTemperatureData2017, aes(x=Rate, y=swing)) +
+  geom_point() + geom_smooth(method=lm)
+```
+```{r}
+ggplot(deathRateTemperatureData2017, aes(x=Rate, y=TEMP)) +
+  geom_point() + geom_smooth(method=lm)
+```
+
+```{r}
+wmap  = getMap()
+lattitudes = data.frame(wmap@data$ISO3, wmap@data$LAT) %>%
+  rename(ISO3 = wmap.data.ISO3, LAT = wmap.data.LAT) %>%
+  mutate(LAT_ABS = abs(LAT))
+suicideDeathRateLat <- suicideDeathRates %>% filter(Year == 2017) %>% full_join(lattitudes)
+```
+
+```{r}
+ggplot(suicideDeathRateLat, aes(x=Rate, y=abs(LAT-20))) +
+  geom_point() + geom_smooth(method=lm)
+```
+
