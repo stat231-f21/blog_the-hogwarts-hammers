@@ -38,8 +38,10 @@ options(knitr.kable.NA = "")
 MHBeds <- read_csv("data/mental-health-hospital.csv", show_col_types = FALSE)
 suicideRate <- read_csv("data/suicide-death-rates.csv", show_col_types = FALSE)
 sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv", show_col_types = FALSE)
+#CDC
 suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
   rename(id = "STATE")
+#https://worldpopulationreview.com/state-rankings/gun-ownership-by-state
 gunData <- read_csv("data/gunOwnership.csv")
 maleFemaleRatio <- read_csv("data/Male-Female-Ratio-of-Suicide-Rates.csv")
 leafletData <- readOGR(
@@ -340,7 +342,7 @@ leaflet(leafletSuicideData2016) %>%
 
 #ROHIL
 ##Map of suicide by state
-```{r usMap, echo = FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
+```{r usMapParts, include=FALSE,fig.width = 8, fig.height = 4, fig.align="center"}
 data(state)
 #need a master dataset for state name, and abbreviations
 state_info <- data.frame(
@@ -387,11 +389,14 @@ x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
   labs(fill = "Suicide Rate",
        title = "Suicide Rate (per 100,000 people) by State")
 theme_void()
+```
+
+```{r finalUSMap, echo = FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
 # plotting the plot object dynamically
 ggplotly(x, dynamicTicks = TRUE)
 ```
 
-```{r GunMap, echo= FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
+```{r GunMapParts, include=FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
 #creating new dataset with all the information in one place
 gunDataNew <- gunData %>%
   #capitalization change for join below
@@ -413,8 +418,12 @@ y <- ggplot(graphs_map_guns, aes(fill = gunOwnership, text = paste("State: ", st
   labs(fill = "Gun Ownership",
        title = "Percentage of Gun Owners by State")
 theme_void()
+```
+
+```{r finalGunMap, echo= FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
 #plotting object
 ggplotly(y, dynamicTicks = TRUE)
+
 ```
 
 ```{r suicideGun, echo = FALSE, fig.width = 8, fig.height = 5, fig.align="center"}
