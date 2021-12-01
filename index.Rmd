@@ -20,6 +20,14 @@ library(rgeos)
 library(rgdal)
 library(leaflet)
 library(RColorBrewer)
+library(widgetframe)
+library(htmltools)
+library(tidyRSS)
+library(wordcloud)
+library(wordcloud2)
+library(tm)
+library(stringr)
+
 # for example code; delete if not needed
 
 # Set code chunk defaults
@@ -179,160 +187,301 @@ leaflet(leafletSuicideData2016) %>%
 
   
 ### What if we look at throughout history?
+
+
+```{r, echo=FALSE}
+#knitr::include_app("https://vkuntz23.shinyapps.io/WorldSuicideRates/", height = "800px")
+```
+
   Do we see any trends?
   insert shiny app
   Looks like the 20 degrees north of the equator looks much better
-  
+
+### Is there a temperature correlation?
+```{r}
+temperatureData <- read.csv("data/Country_temperatureCRU.csv") %>%
+  select(ISO_3DIGIT, Annual_temp) %>%
+  rename(ISO3 = ISO_3DIGIT, TEMP = Annual_temp)
+deathRateTemperatureData2016 <- left_join(suicideData2016, temperatureData)
+ggplot(deathRateTemperatureData2016, aes(x = SuicideDeathRate, y = TEMP)) +
+  geom_point() +
+  geom_smooth(method = lm)
+```
+
+
 ### What other trends do we see?
   Russia and neighboring countries increase after soviet union fall
 
 ## What is the US saying about mental health needs?
   Insert word cloud
-  
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+getNewsWordCloud <- function(startDate, yearCount, interval, searchTerm, wordsToRemove, country) {
+  allTitles <- data.frame()
+  print(startDate)
+  print(yearCount)
+  print(interval)
+  print(searchTerm)
+  print(wordsToRemove)
+  print(country)
+  # Loop over two day periods in 2014 and 2015 to get all headlines. Google RSS feed is limited to 100
+  # headlines, so we will miss articles if we go with longer time periods
+
+  numIntervals <- as.integer(yearCount * 365 / interval)
+
+  for (day in 1:numIntervals) {
+    nextDate <- startDate + interval
+    print(paste("Getting articles from", startDate, "to", nextDate))
+    newsUrl <- URLencode(paste0("https://news.google.com/rss/search?q=", searchTerm, "+after:", startDate, "+before:", nextDate, "&ceid=", country, "&gl=", country))
+    scrapedTitles <- tryCatch(
+      # Some days have no articles. Handle the error so that the scrape doesn't crash
+      error = function(cnd) {
+        return(NA)
+      },
+      scrapedTitles <- newsUrl %>%
+        tidyfeed() %>%
+        select(item_title)
+    )
+
+    print(paste("Got ", nrow(scrapedTitles), "articles"))
+    allTitles <- allTitles %>% rbind(scrapedTitles)
+    startDate <- nextDate
+  }
+  # Remove names of sources
+  allTitles <- allTitles %>%
+    mutate(item_title = gsub(" *-[^-]*$", "", item_title)) %>%
+    mutate(item_title = gsub(" *\\|.*$", "", item_title))
+  processedTitles <- Corpus(VectorSource(allTitles$item_title)) %>%
+    tm_map(stripWhitespace) %>%
+    tm_map(removePunctuation) %>%
+    tm_map(removeNumbers) %>%
+    tm_map(content_transformer(tolower)) %>%
+    tm_map(removeWords, stopwords("english")) %>%
+    tm_map(removeWords, wordsToRemove)
+  # tm_map(removeWords, c("suicide", "news", "times", "suicides"))
+
+  termDocumentMatrix <- TermDocumentMatrix(processedTitles)
+  matrix <- as.matrix(termDocumentMatrix)
+  words <- sort(rowSums(matrix), decreasing = TRUE)
+  wordDataframe <- data.frame(word = names(words), freq = words)
+  wordDataframe
+}
+```
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+usMentalHealthNeeds <- getNewsWordCloud(as.Date("2014-01-01"), 3, 30, "+\"mental health\"+needs", c("mental", "health"), "US")
+greatBritainMentalHealthNeeds <- getNewsWordCloud(as.Date("2014-01-01"), 3, 30, "+\"mental health\"+needs", c("mental", "health"), "GB")
+```
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+wordcloud(words = usMentalHealthNeeds$word, freq = usMentalHealthNeeds$freq, min.freq = 1, max.words = 100, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
+
+```{r}
+wordcloud(words = greatBritainMentalHealthNeeds$word, freq = greatBritainMentalHealthNeeds$freq, min.freq = 1, max.words = 100, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+```
 ### Does having more mental health hospital beds actually correlate with lower suicide rates?
   No!
+```{r}
+deathRateNumberBeds <- left_join(suicideData2016, bedData2016)
+ggplot(deathRateNumberBeds, aes(x = SuicideDeathRate, y = TOTAL_BEDS)) +
+  geom_point() +
+  geom_smooth(method = lm)
+```
+
+```{r worldMap2, echo = FALSE}
+# mybins <- c(0, 1, 2, 5, 7, 10, 12, 15, 20, 25, 30, Inf)
+# mypalette <- colorBin(
+#   palette = c(
+#     "#333399",
+#     "#555599",
+#     "#777799",
+#     "#999999",
+#     "#ffcccc",
+#     "#ffaaaa",
+#     "#ff9999",
+#     "#ff7777",
+#     "#cc5555",
+#     "#aa0000",
+#     "#550000"
+#   ),
+#   domain = leafletSuicideData2016@data$SuicideDeathRate,
+#   na.color = "transparent",
+#   bins = mybins
+# )
+# 
+# # Prepare the text for tooltips:
+# hoverText <- paste(
+#   "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+#   "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
+#   "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+#   "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+#   sep = ""
+# ) %>%
+#   lapply(htmltools::HTML)
+# 
+# # Final Map
+# leaflet(leafletSuicideData2016) %>%
+#   addTiles() %>%
+#   setView(lat = 10, lng = 0, zoom = 2) %>%
+#   addPolygons(
+#     fillColor = ~ mypalette(SuicideDeathRate),
+#     stroke = TRUE,
+#     fillOpacity = 1,
+#     color = "white",
+#     weight = 1,
+#     label = hoverText,
+#     labelOptions = labelOptions(
+#       style = list("font-weight" = "normal", padding = "3px 8px"),
+#       textsize = "13px",
+#       direction = "auto"
+#     )
+#   ) %>%
+#   addLegend(pal = mypalette, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft")
+```
   
 ## Limitations
 
 ## Further exploration
 ```{r leaflet, include = FALSE}
-mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-mypalette <- colorBin(
-  palette = c("#ff0000", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
-  domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
-  na.color = "transparent",
-  bins = mybins
-)
-
-# Prepare the text for tooltips:
-hoverText <- paste(
-  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
-  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
-  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
-  sep = ""
-) %>%
-  lapply(htmltools::HTML)
-
-# Final Map
-leaflet(leafletSuicideData2016) %>%
-  addTiles() %>%
-  setView(lat = 10, lng = 0, zoom = 2) %>%
-  addPolygons(
-    fillColor = ~ mypalette(MaleFemaleSuicideRatio),
-    stroke = TRUE,
-    fillOpacity = 1,
-    color = "white",
-    weight = 1,
-    label = hoverText,
-    labelOptions = labelOptions(
-      style = list("font-weight" = "normal", padding = "3px 8px"),
-      textsize = "13px",
-      direction = "auto"
-    )
-  ) %>%
-  addLegend(pal = mypalette, values = ~MaleFemaleSuicideRatio, opacity = 1, title = "Ratio of Male to Female Suicide", position = "bottomleft")
+# mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+# mypalette <- colorBin(
+#   palette = c("#ff0000", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
+#   domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
+#   na.color = "transparent",
+#   bins = mybins
+# )
+#
+# # Prepare the text for tooltips:
+# hoverText <- paste(
+#   "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+#   "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+#   "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+#   sep = ""
+# ) %>%
+#   lapply(htmltools::HTML)
+#
+# # Final Map
+# leaflet(leafletSuicideData2016) %>%
+#   addTiles() %>%
+#   setView(lat = 10, lng = 0, zoom = 2) %>%
+#   addPolygons(
+#     fillColor = ~ mypalette(MaleFemaleSuicideRatio),
+#     stroke = TRUE,
+#     fillOpacity = 1,
+#     color = "white",
+#     weight = 1,
+#     label = hoverText,
+#     labelOptions = labelOptions(
+#       style = list("font-weight" = "normal", padding = "3px 8px"),
+#       textsize = "13px",
+#       direction = "auto"
+#     )
+#   ) %>%
+#   addLegend(pal = mypalette, values = ~MaleFemaleSuicideRatio, opacity = 1, title = "Ratio of Male to Female Suicide", position = "bottomleft")
 ```
 
 
-```{r worldMap2, include = FALSE}
-mybins <- c(0, 1, 2, 5, 7, 10, 12, 15, 20, 25, 30, Inf)
-mypalette <- colorBin(
-  palette = c(
-    "#333399",
-    "#555599",
-    "#777799",
-    "#999999",
-    "#ffcccc",
-    "#ffaaaa",
-    "#ff9999",
-    "#ff7777",
-    "#cc5555",
-    "#aa0000",
-    "#550000"
-  ),
-  domain = leafletSuicideData2016@data$SuicideDeathRate,
-  na.color = "transparent",
-  bins = mybins
-)
-
-# Prepare the text for tooltips:
-hoverText <- paste(
-  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
-  "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
-  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
-  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
-  sep = ""
-) %>%
-  lapply(htmltools::HTML)
-
-# Final Map
-leaflet(leafletSuicideData2016) %>%
-  addTiles() %>%
-  setView(lat = 10, lng = 0, zoom = 2) %>%
-  addPolygons(
-    fillColor = ~ mypalette(SuicideDeathRate),
-    stroke = TRUE,
-    fillOpacity = 1,
-    color = "white",
-    weight = 1,
-    label = hoverText,
-    labelOptions = labelOptions(
-      style = list("font-weight" = "normal", padding = "3px 8px"),
-      textsize = "13px",
-      direction = "auto"
-    )
-  ) %>%
-  addLegend(pal = mypalette, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft")
+```{r worldMap4, include = FALSE}
+# mybins <- c(0, 1, 2, 5, 7, 10, 12, 15, 20, 25, 30, Inf)
+# mypalette <- colorBin(
+#   palette = c(
+#     "#333399",
+#     "#555599",
+#     "#777799",
+#     "#999999",
+#     "#ffcccc",
+#     "#ffaaaa",
+#     "#ff9999",
+#     "#ff7777",
+#     "#cc5555",
+#     "#aa0000",
+#     "#550000"
+#   ),
+#   domain = leafletSuicideData2016@data$SuicideDeathRate,
+#   na.color = "transparent",
+#   bins = mybins
+# )
+#
+# # Prepare the text for tooltips:
+# hoverText <- paste(
+#   "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+#   "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
+#   "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+#   "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+#   sep = ""
+# ) %>%
+#   lapply(htmltools::HTML)
+#
+# # Final Map
+# leaflet(leafletSuicideData2016) %>%
+#   addTiles() %>%
+#   setView(lat = 10, lng = 0, zoom = 2) %>%
+#   addPolygons(
+#     fillColor = ~ mypalette(SuicideDeathRate),
+#     stroke = TRUE,
+#     fillOpacity = 1,
+#     color = "white",
+#     weight = 1,
+#     label = hoverText,
+#     labelOptions = labelOptions(
+#       style = list("font-weight" = "normal", padding = "3px 8px"),
+#       textsize = "13px",
+#       direction = "auto"
+#     )
+#   ) %>%
+#   addLegend(pal = mypalette, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft")
 ```
 
 ```{r worldMap3, include = FALSE}
-mybins <- c(0, 1, 2, 3, 4, 5, 8, 10, 15, 20, 50, 100)
-mypaletteDeathRate <- colorBin(
-  palette = c("#ffffff", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
-  domain = leafletSuicideData2016@data$SuicideDeathRate,
-  na.color = "transparent",
-  bins = mybins
-)
-
-mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-
-mypaletteMaleFemale <- colorBin(
-  palette = c("#009900", "#0000ff", "#2200dd", "#4400aa", "#660099", "#880077", "#aa0066", "#bb0055", "#cc0033", "#ee0011", "#ff0000"),
-  domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
-  na.color = "transparent",
-  bins = mybins
-)
-# Prepare the text for tooltips:
-hoverText <- paste(
-  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
-  "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
-  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
-  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
-  sep = ""
-) %>%
-  lapply(htmltools::HTML)
-
-# Final Map
-leaflet(leafletSuicideData2016) %>%
-  addTiles() %>%
-  setView(lat = 30, lng = 0, zoom = 1.6) %>%
-  addPolygons(
-    fillColor = ~ mypaletteDeathRate(SuicideDeathRate),
-    stroke = TRUE,
-    fillOpacity = 0,
-    opacity = 0,
-    color = "black",
-    weight = 1,
-    label = hoverText,
-    labelOptions = labelOptions(
-      style = list("font-weight" = "normal", padding = "3px 8px"),
-      textsize = "13px",
-      direction = "auto"
-    )
-  ) %>%
-  addCircles(lat = leafletSuicideData2016@data$LAT, lng = leafletSuicideData2016@data$LON, weight = 1, opacity = 1, fillOpacity = .7, radius = sqrt(leafletSuicideData2016@data$SuicideDeathRate) * 40000, color = "white", fillColor = mypaletteMaleFemale(leafletSuicideData2016@data$MaleFemaleSuicideRatio)) %>%
-  #  addLegend(pal = mypaletteDeathRate, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft") %>%
-  addLegend(pal = mypaletteMaleFemale, values = ~MaleFemaleSuicideRatio, opacity = .7, title = "Male Female Ratio", position = "bottomleft")
+# mybins <- c(0, 1, 2, 3, 4, 5, 8, 10, 15, 20, 50, 100)
+# mypaletteDeathRate <- colorBin(
+#   palette = c("#ffffff", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
+#   domain = leafletSuicideData2016@data$SuicideDeathRate,
+#   na.color = "transparent",
+#   bins = mybins
+# )
+#
+# mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+#
+# mypaletteMaleFemale <- colorBin(
+#   palette = c("#009900", "#0000ff", "#2200dd", "#4400aa", "#660099", "#880077", "#aa0066", "#bb0055", "#cc0033", "#ee0011", "#ff0000"),
+#   domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
+#   na.color = "transparent",
+#   bins = mybins
+# )
+# # Prepare the text for tooltips:
+# hoverText <- paste(
+#   "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+#   "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
+#   "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+#   "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+#   sep = ""
+# ) %>%
+#   lapply(htmltools::HTML)
+#
+# # Final Map
+# leaflet(leafletSuicideData2016) %>%
+#   addTiles() %>%
+#   setView(lat = 30, lng = 0, zoom = 1.6) %>%
+#   addPolygons(
+#     fillColor = ~ mypaletteDeathRate(SuicideDeathRate),
+#     stroke = TRUE,
+#     fillOpacity = 0,
+#     opacity = 0,
+#     color = "black",
+#     weight = 1,
+#     label = hoverText,
+#     labelOptions = labelOptions(
+#       style = list("font-weight" = "normal", padding = "3px 8px"),
+#       textsize = "13px",
+#       direction = "auto"
+#     )
+#   ) %>%
+#   addCircles(lat = leafletSuicideData2016@data$LAT, lng = leafletSuicideData2016@data$LON, weight = 1, opacity = 1, fillOpacity = .7, radius = sqrt(leafletSuicideData2016@data$SuicideDeathRate) * 40000, color = "white", fillColor = mypaletteMaleFemale(leafletSuicideData2016@data$MaleFemaleSuicideRatio)) %>%
+#   #  addLegend(pal = mypaletteDeathRate, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft") %>%
+#   addLegend(pal = mypaletteMaleFemale, values = ~MaleFemaleSuicideRatio, opacity = .7, title = "Male Female Ratio", position = "bottomleft")
 ```
 
 
