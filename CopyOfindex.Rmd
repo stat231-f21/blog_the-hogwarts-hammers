@@ -1,7 +1,7 @@
 ---
-title: "Suicide"
+title: "Suicide Rates Across the World"
 author: "Victoria Kuntz and Rohil Bathija"
-date: "Add a date"
+date: "December 8th 2021"
 output:
   rmdformats::readthedown:
     thumbnails: false
@@ -16,213 +16,383 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(sf)
 library(plotly)
+library(rgeos)
+library(rgdal)
+library(leaflet)
+library(RColorBrewer)
 # for example code; delete if not needed
 
-# Set code chunk defaults 
-knitr::opts_chunk$set(echo = FALSE, 
-                      mesage = FALSE,
-                      warning = FALSE,
-                      fig.align = "center")
+# Set code chunk defaults
+knitr::opts_chunk$set(
+  echo = FALSE,
+  mesage = FALSE,
+  warning = FALSE,
+  fig.align = "center"
+)
 
 # Set R environment options
-options(knitr.kable.NA = '')
+options(knitr.kable.NA = "")
 ```
 
-# Header 1 (Section heading)
-
-## Header 2 (Subsection heading)
-
-### Header 3 (Subsubsection heading)
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For example, you can include **Bold** and _Italic_ and `Code` text.  For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-You should test out updating your GitHub Pages website:
-
-* clone your group's blog project repo in RStudio
-* update "Your Project Title Here" to a new title in the YAML header
-* knit `index.Rmd` (we will now knit to HTML by default instead of pdf)
-* commit and push **both** `index.Rmd` and `index.html`
-* go to https://stat231-f21.github.io/blog_the-hogwarts-hammers/ to see the published test document (this is publicly available!)
-
-## Including code and plots
-
-You can embed code as normal, for example:
-
-```{r reading-data, eval = TRUE}
-MHHospitals <- read_csv("data/MentalHealthHospitalsByCountry.csv", show_col_types = FALSE)
-suicideRate <- read_csv("data/SuicideRatesByCountry.csv", show_col_types = FALSE)
+```{r reading-data, eval = TRUE, include = FALSE}
+MHBeds <- read_csv("data/mental-health-hospital.csv", show_col_types = FALSE)
+suicideRate <- read_csv("data/suicide-death-rates.csv", show_col_types = FALSE)
 sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv", show_col_types = FALSE)
 suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
   rename(id = "STATE")
+gunData <- read_csv("data/gunOwnership.csv")
+maleFemaleRatio <- read_csv("data/Male-Female-Ratio-of-Suicide-Rates.csv")
+leafletData <- readOGR(
+  dsn = paste0(getwd(), "/data/LeafletData"),
+  layer = "TM_WORLD_BORDERS_SIMPL-0.3",
+  verbose = FALSE
+)
 ```
 #VIETTA
-```{r wrangling}
-# make the year a column as opposed to a column header
-suicideRateByYear <- suicideRate %>% 
-  pivot_longer(cols = starts_with("20"), names_to = "Year", values_to = "RateWithRange") %>%
-  # splitting the rate and the range into separate columns
-  mutate(Rate = as.numeric(gsub(" .*$","",RateWithRange)), Range = gsub("^.* ", "", RateWithRange))
-# calculating gender ratio of suicide rates
-maleSuicideRate <- suicideRateByYear %>%
-  filter(suicideRateByYear$Sex == 'Male') %>%
-  select(Country, Year, Rate) %>%
-  rename(MaleRate = Rate)
+```{r wrangling, include = FALSE}
+# Rename country codes and years and drop unnecessary columns so that all data sets match
+maleFemaleRatio <- maleFemaleRatio %>%
+  mutate(ISO3 = Code)
+suicideRate <- suicideRate %>%
+  mutate(ISO3 = Code)
+MHBeds <- MHBeds %>%
+  select("GHO_DISPLAY", "YEAR", "COUNTRY_CODE", "Number_Beds") %>%
+  mutate(ISO3 = COUNTRY_CODE, Year = YEAR)
 
-femaleSuicideRate <- suicideRateByYear %>%
-  filter(suicideRateByYear$Sex == 'Female') %>%
-  select(Country, Year, Rate) %>%
-  rename(FemaleRate = Rate)
+# Pull out different bed metrics into separate data sets
+MHBedsInMHHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == "Beds in mental hospitals (per 100 000 population)") %>%
+  mutate(BEDS_IN_MENTAL_HOSPITALS = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_MENTAL_HOSPITALS)
+MHBedsInGeneralHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == "Beds for mental health in general hospitals (per 100 000 population)") %>%
+  mutate(BEDS_IN_GENERAL_HOSPITALS = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_GENERAL_HOSPITALS)
+MHBedsInCommunityHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == "Beds in community residential facilities (per 100 000 population)") %>%
+  mutate(BEDS_IN_COMMUNITY_FACILITIES = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_COMMUNITY_FACILITIES)
 
-suicideRateCompare <- maleSuicideRate %>%
-  left_join(femaleSuicideRate) %>%
-  mutate(Ratio = MaleRate / FemaleRate)
+# Combine bed data into a single data set and replace NA with 0
+bedData2016 <- full_join(MHBedsInMHHospitals, full_join(MHBedsInGeneralHospitals, MHBedsInCommunityHospitals)) %>%
+  replace_na(list(BEDS_IN_MENTAL_HOSPITALS = 0, BEDS_IN_GENERAL_HOSPITALS = 0, BEDS_IN_COMMUNITY_FACILITIES = 0)) %>%
+  mutate(TOTAL_BEDS = BEDS_IN_MENTAL_HOSPITALS + BEDS_IN_GENERAL_HOSPITALS + BEDS_IN_COMMUNITY_FACILITIES) %>%
+  filter(Year == 2016)
+
+# Join together all data sets into a single data set for display
+suicideData <- full_join(suicideRate, maleFemaleRatio)
+suicideData <- full_join(suicideData, bedData2016)
+suicideData2016 <- suicideData %>%
+  filter(Year == "2016")
+write_csv(suicideData, "fullSuicideData.csv")
+maleFemaleRatio2017 <- maleFemaleRatio %>%
+  filter(Year == "2017")
+
+leafletMaleFemaleRatio2017 <- merge(leafletData, maleFemaleRatio2017, by = "ISO3")
+leafletSuicideData2016 <- merge(leafletData, suicideData2016, by = "ISO3")
 ```
 
-```{r worldMap}
-world <- ne_countries(scale = "medium", returnclass = "sf")
-suicideRate2017 <- suicideRateCompare %>%
-  filter(suicideRateCompare$Year == '2017') %>%
-  select(Country, Ratio) %>%
-  rename(name = Country)
-
-worldRates <- world%>%
-  left_join(suicideRate2017)
-
-p <- ggplot(data = worldRates, aes(fill = Ratio, text = paste("Country: ", name))) +
-  geom_sf(size=.2, colour="white") +
-#  scale_color_gradient2(midpoint=1, low="blue", mid="grey", high="red")
-scale_fill_viridis(option = "magma", 
-                   breaks=c(1, 3, 5, 7, 9, 11), 
-                   name="Ratio of male to female suicide rate", 
-                   guide = guide_legend( keyheight = unit(3, units = "mm"), keywidth=unit(12, units = "mm")) )
-
-  ggplotly(p, dynamicTicks = TRUE)
+```{r, include = FALSE}
+# Get all years into one row of the data frame
+wideSuicideData <- NULL
+for (year in 1990:2017) {
+  dataForYear <-
+    suicideData %>%
+    filter(Year == year) %>%
+    select(ISO3, SuicideDeathRate) %>%
+    drop_na()
+  rateName <- paste("Rate", year, sep = "")
+  dataForYear[rateName] <- dataForYear$SuicideDeathRate
+  dataForYear <- dataForYear %>% select("ISO3", rateName)
+  if (is.null(wideSuicideData)) {
+    wideSuicideData <- dataForYear
+  } else {
+    wideSuicideData <- full_join(wideSuicideData, dataForYear, by = c("ISO3"))
+  }
+}
+write_csv(wideSuicideData, "suicideRatesWideYears.csv")
 ```
 
-```{r}
-missingRates <- worldRates %>% filter(is.na(worldRates$Ratio)) %>% select(name)
+## Introduction
+ Suicide is consistently one of the leading causes of death in the world. 
+ 
+```{r usSuicideRates}
+usSuicideRatesPost2000 <- suicideRate %>%
+  filter(Code == "USA", Year >= 2000)
+ggplot(usSuicideRatesPost2000, aes(x = Year, y = SuicideDeathRate)) +
+  geom_line()
 ```
 
-```{r worldMap}
-world <- ne_countries(scale = "medium", returnclass = "sf")
-suicideRatebyCountry <- suicideRateByYear %>%
-  filter(suicideRateByYear$Year == '2017') %>%
-  select(Country, Rate) %>%
-  rename(name = Country)
-
-worldSuicideRates <- world%>%
-  left_join(suicideRatebyCountry)
-
-p <- ggplot(data = worldSuicideRates, aes(fill = Rate, text = paste("Country: ", name))) +
-  geom_sf(size=.2, colour="white") +
-#  scale_color_gradient2(midpoint=1, low="blue", mid="grey", high="red")
-  scale_fill_viridis_c(option = "magma")
-  theme_void()
-
-  ggplotly(p, dynamicTicks = TRUE)
+## Data
+  Insert information on where data was obtained
+  
+## What do suicide rates look like around the world?
+  Insert 2016 plot
+```{r, echo=FALSE}
+mybins <- c(0, 1, 2, 5, 7, 10, 12, 15, 20, 25, 30, 50, 100)
+myPalette <- colorBin(
+  palette = c(
+    "#333399",
+    "#555599",
+    "#777799",
+    "#999999",
+    "#ffcccc",
+    "#ffaaaa",
+    "#ff9999",
+    "#ff7777",
+    "#cc5555",
+    "#aa0000",
+    "#550000",
+    "#330000"
+  ),
+  domain = leafletSuicideData2016,
+  na.color = "transparent",
+  bins = mybins
+)
+hoverText <-
+  paste(
+    "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+    "Suicide Rate (2016): ", leafletSuicideData2016$SuicideDeathRate, "<br/>",
+    sep = ""
+  ) %>%
+  lapply(htmltools::HTML)
+leaflet(leafletSuicideData2016) %>%
+  addTiles() %>%
+  setView(lat = 30, lng = 0, zoom = 1.5) %>%
+  addLegend(pal = myPalette, values = leafletSuicideData2016$SuicideDeathRate, opacity = .7, title = "Suicide Death Rate<br/>Per 100k", position = "bottomleft") %>%
+  addCircles(
+    lat = leafletSuicideData2016$LAT, lng = leafletSuicideData2016$LON,
+    radius = leafletSuicideData2016$SuicideDeathRate * 10000,
+    opacity = 1,
+    fillOpacity = .7,
+    weight = 1,
+    group = "circles",
+    color = myPalette(leafletSuicideData2016$SuicideDeathRate),
+    fillColor = myPalette(leafletSuicideData2016$SuicideDeathRate),
+    label = hoverText,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "13px",
+      direction = "auto"
+    )
+  )
 ```
+
+  
+### What if we look at throughout history?
+  Do we see any trends?
+  insert shiny app
+  Looks like the 20 degrees north of the equator looks much better
+  
+### What other trends do we see?
+  Russia and neighboring countries increase after soviet union fall
+
+## What is the US saying about mental health needs?
+  Insert word cloud
+  
+### Does having more mental health hospital beds actually correlate with lower suicide rates?
+  No!
+  
+## Limitations
+
+## Further exploration
+```{r leaflet, include = FALSE}
+mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+mypalette <- colorBin(
+  palette = c("#ff0000", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
+  domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
+  na.color = "transparent",
+  bins = mybins
+)
+
+# Prepare the text for tooltips:
+hoverText <- paste(
+  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+  sep = ""
+) %>%
+  lapply(htmltools::HTML)
+
+# Final Map
+leaflet(leafletSuicideData2016) %>%
+  addTiles() %>%
+  setView(lat = 10, lng = 0, zoom = 2) %>%
+  addPolygons(
+    fillColor = ~ mypalette(MaleFemaleSuicideRatio),
+    stroke = TRUE,
+    fillOpacity = 1,
+    color = "white",
+    weight = 1,
+    label = hoverText,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "13px",
+      direction = "auto"
+    )
+  ) %>%
+  addLegend(pal = mypalette, values = ~MaleFemaleSuicideRatio, opacity = 1, title = "Ratio of Male to Female Suicide", position = "bottomleft")
+```
+
+
+```{r worldMap2, include = FALSE}
+mybins <- c(0, 1, 2, 5, 7, 10, 12, 15, 20, 25, 30, Inf)
+mypalette <- colorBin(
+  palette = c(
+    "#333399",
+    "#555599",
+    "#777799",
+    "#999999",
+    "#ffcccc",
+    "#ffaaaa",
+    "#ff9999",
+    "#ff7777",
+    "#cc5555",
+    "#aa0000",
+    "#550000"
+  ),
+  domain = leafletSuicideData2016@data$SuicideDeathRate,
+  na.color = "transparent",
+  bins = mybins
+)
+
+# Prepare the text for tooltips:
+hoverText <- paste(
+  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+  "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
+  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+  sep = ""
+) %>%
+  lapply(htmltools::HTML)
+
+# Final Map
+leaflet(leafletSuicideData2016) %>%
+  addTiles() %>%
+  setView(lat = 10, lng = 0, zoom = 2) %>%
+  addPolygons(
+    fillColor = ~ mypalette(SuicideDeathRate),
+    stroke = TRUE,
+    fillOpacity = 1,
+    color = "white",
+    weight = 1,
+    label = hoverText,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "13px",
+      direction = "auto"
+    )
+  ) %>%
+  addLegend(pal = mypalette, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft")
+```
+
+```{r worldMap3, include = FALSE}
+mybins <- c(0, 1, 2, 3, 4, 5, 8, 10, 15, 20, 50, 100)
+mypaletteDeathRate <- colorBin(
+  palette = c("#ffffff", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
+  domain = leafletSuicideData2016@data$SuicideDeathRate,
+  na.color = "transparent",
+  bins = mybins
+)
+
+mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+
+mypaletteMaleFemale <- colorBin(
+  palette = c("#009900", "#0000ff", "#2200dd", "#4400aa", "#660099", "#880077", "#aa0066", "#bb0055", "#cc0033", "#ee0011", "#ff0000"),
+  domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
+  na.color = "transparent",
+  bins = mybins
+)
+# Prepare the text for tooltips:
+hoverText <- paste(
+  "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+  "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
+  "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
+  "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
+  sep = ""
+) %>%
+  lapply(htmltools::HTML)
+
+# Final Map
+leaflet(leafletSuicideData2016) %>%
+  addTiles() %>%
+  setView(lat = 30, lng = 0, zoom = 1.6) %>%
+  addPolygons(
+    fillColor = ~ mypaletteDeathRate(SuicideDeathRate),
+    stroke = TRUE,
+    fillOpacity = 0,
+    opacity = 0,
+    color = "black",
+    weight = 1,
+    label = hoverText,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "13px",
+      direction = "auto"
+    )
+  ) %>%
+  addCircles(lat = leafletSuicideData2016@data$LAT, lng = leafletSuicideData2016@data$LON, weight = 1, opacity = 1, fillOpacity = .7, radius = sqrt(leafletSuicideData2016@data$SuicideDeathRate) * 40000, color = "white", fillColor = mypaletteMaleFemale(leafletSuicideData2016@data$MaleFemaleSuicideRatio)) %>%
+  #  addLegend(pal = mypaletteDeathRate, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft") %>%
+  addLegend(pal = mypaletteMaleFemale, values = ~MaleFemaleSuicideRatio, opacity = .7, title = "Male Female Ratio", position = "bottomleft")
+```
+
 
 
 #ROHIL
 ##Map of suicide by state
-```{r usMap}
+```{r usMap, echo = FALSE}
 data(state)
-state_info <- data.frame(Region = state.region,
-                         # Match state variable name in map data
-                         state = tolower(state.name), 
-                         # Match state variable name in summary data
-                         id = state.abb)
+state_info <- data.frame(
+  Region = state.region,
+  # Match state variable name in map data
+  state = tolower(state.name),
+  # Match state variable name in summary data
+  id = state.abb
+)
 SuicideStateWithInfo <- suicideState %>%
   left_join(state_info, by = "id") %>%
   filter(YEAR == "2019") %>%
   select(c("YEAR", "id", "RATE", "DEATHS", "Region", "state")) %>%
   rename(region = "Region", state = "id", id = "state")
 rename(state_info, id = "state", state = "id")
-state_map <- maps::map("state",plot = FALSE, fill = TRUE) %>% 
-  st_as_sf()%>%
+state_map <- maps::map("state", plot = FALSE, fill = TRUE) %>%
+  st_as_sf() %>%
   rename(id = "ID")
 
-graphs_map <- state_map %>% 
+graphs_map <- state_map %>%
   left_join(SuicideStateWithInfo, by = "id")
 
-ggplot(graphs_map, aes(fill = DEATHS)) +
- geom_sf() +
+#shows the map with distribution of total deaths
+#decided to comment it out and not use it because it doesn't show anything but population density
+
+#y <- ggplot(graphs_map, aes(fill = DEATHS, text = paste("State: ", id))) +
+  #geom_sf(size = .2, colour = "white") +
+  #scale_fill_viridis(option = "magma", direction = -1)
+#theme_void()
+#ggplotly(y, dynamicTicks = TRUE)
+
+#created plot object with us map and have labeled text for the hover feature of plotly
+x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
+  geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1)
-  theme_void()
-  
-ggplot(graphs_map, aes(fill = RATE)) +
- geom_sf() +
+theme_void()
+# plotting the plot object dynamically
+ggplotly(x, dynamicTicks = TRUE)
+```
+
+```{r GunMap, echo= FALSE}
+gunDataNew <- gunData %>%
+  mutate(state = tolower(State)) %>%
+  left_join(state_info, by = "state") %>%
+  select(id, state, gunOwnership, totalGuns)
+state_map_new <- state_map %>%
+  rename(state = id)
+graphs_map_guns <- state_map_new %>%
+  left_join(gunDataNew, by = "state")
+
+y <- ggplot(graphs_map_guns, aes(fill = gunOwnership, text = paste("State: ", id))) +
+  geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1)
-  theme_void()
+theme_void()
+ggplotly(y, dynamicTicks = TRUE)
 ```
-In a study from the 1920s, fifty cars were used to see how the speed of the car and the distance taken to stop were related.  Speeds ranged between `r min(cars$speed)` and `r max(cars$speed)` mph.  Distances taken to stop ranged between `r min(cars$dist)` and `r max(cars$dist)` feet, with the middle 50% falling between `r as.numeric(quantile(cars$dist)[2])` and `r as.numeric(quantile(cars$dist)[4])` feet.  
-
-You can also embed plots as normal, for example:
-
-```{r figure1}
-
-```
-
-Take note of the default code chunk options in the `setup` code chunk, and adjust individual code chunk options as needed. for example, unlike the rest of the Rmd files we worked in this semester, the default code chunk option is `echo = FALSE`, so you will need to set `echo  = TRUE` for any code chunks you would like to display in the blog. 
-
-
-## Including links and images/videos
-
-You can include [links](https://www.datadreaming.org/post/r-markdown-theme-gallery/) and there are a few ways to embed  images! Both options for embedding images below can be used interchangeably. They both work for png, pdf, jpg, and even gif formats, and both support filepaths that are either URLs (for videos, you can include links to any valid YouTube or Vimeo URLs; see [here](https://bookdown.org/yihui/rmarkdown/learnr-videos.html) for more details) or point to a location within your project directory. 
-
-### Option 1: Markdown approach
-
-![This is a figure caption. The artwork is called Safe Space by  [Kenesha Sneed](https://www.keneshasneed.com/#/safespace/)](img/Kenesha-Sneed_safe-space.jpeg)
-
-
-### Option 2: Code chunk approach
-
-```{r, fig.cap = "This is also figure caption"}
-knitr::include_graphics("https://media.giphy.com/media/H7ZrrA9V2pd3Tehdds/giphy.gif")
-```
-
-## Including equations
-
-Equations may be needed if you are explaining a new technique or perhaps providing some other relevant formulas in your exposition. There are two ways to include equations:
-
-* Inline: $b \sim N(0, \sigma^2_b)$
-* Display-style (displayed on its own line): $$\frac{\sigma^2_b}{\sigma^2_b + \sigma^2_e}$$
-
-For typesetting equations appropriately, take a look at the *Symbols in math mode* section of this  [cheat sheet](https://users.dickinson.edu/~richesod/latex/latexcheatsheet.pdf)  (or do some extra Googling---there are *many* resources).
-
-
-# You can even create tabs within your webpage if you want! {.tabset .tabset-fade .tabset-pills}
-
-Every subsection heading (starting with `##`) until you create a new section heading (starting with `#`) will be a new tab.
-
-## Bulleted list
-
-You can make a bulleted list like this:
-
-* item 1
-* item 2
-* item 3
-
-
-## Numbered list
-
-You can make a numbered list like this
-
-1. First thing I want to say
-2. Second thing I want to say
-3. Third thing I want to say
-
-# Customizing your blog design
-
-As a *final* detail **only** if you have time, you can explore options for customizing the style of your blog. By default, we are using the `readthedown` theme from the [**rmdformats** package](https://github.com/juba/rmdformats) (see Line 6 of this file if you want to switch out themes). There are, I'm sure, many many many more similar packages with built in themes, or you can look into how to include a CSS code chunk to customize aspects of the current theme.  
-
-There are some easy-to-change options that you can play around with:
-
-* The theme itself (Line 6): `rmdformats::readthedown`, `rmdformats::downcute`, `rmdformats::robobook`, `rmdformats::material`,
-  * For `downcute` only, you can add a new indented line below Line 6 with the code `downcute_theme: "chaos"` for the `downcute chaos` theme
-  * I would *not* recommend the other themes that do not have the sidebar navigation
-  
-* Syntax highlighting options (Line 8, `highlight`): `"default"`, `"tango"`, `"pygments"`, `"kate"`, `"monochrome"`, `"espresso"`, `"zenburn"`, `"haddock"`, or `"textmate"` (or `NULL` for no syntax highlighting)
-
-
-You can explore additional customizable YAML options by looking at the [**rmdformats** package](https://github.com/juba/rmdformats) page or running, for example, `?rmdformats::readthedown()` to see the help documentation for a particular theme from the package.
