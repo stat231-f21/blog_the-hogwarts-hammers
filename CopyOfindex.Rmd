@@ -340,8 +340,9 @@ leaflet(leafletSuicideData2016) %>%
 
 #ROHIL
 ##Map of suicide by state
-```{r usMap, echo = FALSE}
+```{r usMap, echo = FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
 data(state)
+#need a master dataset for state name, and abbreviations
 state_info <- data.frame(
   Region = state.region,
   # Match state variable name in map data
@@ -349,16 +350,23 @@ state_info <- data.frame(
   # Match state variable name in summary data
   id = state.abb
 )
+#creating one dataset where all the suicide info will be
 SuicideStateWithInfo <- suicideState %>%
+  #added in state name and abbreviations
   left_join(state_info, by = "id") %>%
+  #only want the most recent year (one year of data)
   filter(YEAR == "2019") %>%
   select(c("YEAR", "id", "RATE", "DEATHS", "Region", "state")) %>%
+  #renaming the id columns so that future joins work
   rename(region = "Region", state = "id", id = "state")
 rename(state_info, id = "state", state = "id")
+#this is the object needed for the geospatial representation
 state_map <- maps::map("state", plot = FALSE, fill = TRUE) %>%
   st_as_sf() %>%
+  #changed capitalization for joins
   rename(id = "ID")
 
+#created the object to be plotted along with the data
 graphs_map <- state_map %>%
   left_join(SuicideStateWithInfo, by = "id")
 
@@ -374,25 +382,62 @@ graphs_map <- state_map %>%
 #created plot object with us map and have labeled text for the hover feature of plotly
 x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
   geom_sf(size = .2, colour = "white") +
-  scale_fill_viridis(option = "magma", direction = -1)
+  scale_fill_viridis(option = "magma", direction = -1) +
+  #adding legend title and title
+  labs(fill = "Suicide Rate",
+       title = "Suicide Rate (per 100,000 people) by State")
 theme_void()
 # plotting the plot object dynamically
 ggplotly(x, dynamicTicks = TRUE)
 ```
 
-```{r GunMap, echo= FALSE}
+```{r GunMap, echo= FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
+#creating new dataset with all the information in one place
 gunDataNew <- gunData %>%
+  #capitalization change for join below
   mutate(state = tolower(State)) %>%
   left_join(state_info, by = "state") %>%
   select(id, state, gunOwnership, totalGuns)
+#creating the sf object using the previous one and renaming the id to state
+#to match gunDataNew
 state_map_new <- state_map %>%
   rename(state = id)
+#creating the final dataset to use for plot
 graphs_map_guns <- state_map_new %>%
   left_join(gunDataNew, by = "state")
-
-y <- ggplot(graphs_map_guns, aes(fill = gunOwnership, text = paste("State: ", id))) +
+#creating plot object with dynamic text
+y <- ggplot(graphs_map_guns, aes(fill = gunOwnership, text = paste("State: ", state))) +
   geom_sf(size = .2, colour = "white") +
-  scale_fill_viridis(option = "magma", direction = -1)
+  scale_fill_viridis(option = "magma", direction = -1) +
+  #adding title and legend title
+  labs(fill = "Gun Ownership",
+       title = "Percentage of Gun Owners by State")
 theme_void()
+#plotting object
 ggplotly(y, dynamicTicks = TRUE)
+```
+
+```{r suicideGun, echo = FALSE, fig.width = 8, fig.height = 5, fig.align="center"}
+#wrangling
+suicideGun <- SuicideStateWithInfo %>%
+  #selecting only the 2 important columns for suicide info
+  select(state, RATE) %>%
+  #renaming column for joining
+  rename(id = state) %>%
+  #joining with gun data
+  left_join(gunDataNew, by = "id") %>%
+  #selecting the 3 important varibale to graph
+  select(id, RATE, gunOwnership) %>%
+  #renaming for clarity
+  rename(State = id, Rate = RATE)
+#plotting the data with guns on x axis and suicide rates on y
+ggplot(suicideGun, aes(x = gunOwnership, y = Rate)) +
+  #adding in points
+  geom_point() +
+  #adding in labels for each state
+  geom_text(aes(label= State), hjust = 0, vjust = -0.5)+
+  #adding informative labels
+  labs(x = "Gun Ownership (Percentage)", 
+       y = "Suicide Rate (per 100,000)",
+       title = "Suicide Rate vs Gun Ownership by US State")
 ```
