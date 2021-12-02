@@ -150,6 +150,9 @@ ggplot(usSuicideRatesPost2000, aes(x = Year, y = SuicideDeathRate)) +
   To examine the geographic distribution of our data, we downloaded the TM_WORLD_BORDERS_SIMPL map data from http://thematicmapping.org, and joined our data sets to the geographic data based on the ISO3 country codes in the data. We used the leaflet package to create interactive maps of our data. To produce an interactive shiny app that explored the evolution of suicide rates over time, we massaged the data to get all years of suicide data into a single row for each country so that we could efficiently move through the years without redrawing the whole map.
   
   To examine the headlines in the news, we used Google's news RSS API feed. This API allows us to search Google news and get a list of headlines matching a search term from a particular country for a particular point in time. Because the API returns a maximum of 100 rows per query, we had to break a three year period into one month periods and combine the data together.
+  
+## Limitations
+There are a number of limiations of looking at worldwide suicide data. First, different data points are missing for different countries. Second, the quality of reporting of suicide data varies widely around the world. Third, some countries, like China and North Korea have extensive control over information and an incentive to report low rates. Suicide is also a very loaded term. Many suicides may be reported as accidental deaths, and failed suicides are also not reported. The tendency of suicide to be reported as accidental death likely varies widely around the world. In the word cloud, the data we could easily access was news headlines. These are generally attention grabbing, and not a good reflection of the actual content of the articles.
 
   
 ## Suicide Rates Around the World
@@ -339,9 +342,7 @@ ggplot(deathRateNumberBeds, aes(x = SuicideDeathRate, y = TOTAL_BEDS)) +
 
 <br> Interestingly enough, this plot shows a slight positive correlation between number of mental health hospital beds and suicide rate. This means that more hospital beds is correlated with a higher suicide rate. While this is initially surprising, it does make sense: if there are more suicidal people, there is a higher demand for hospital beds. However, if those hospital beds were really effective in preventing suicide, we would expect increased beds to lower the suicide rate.
 
-  
-## Limitations
-There are a number of limiations of looking at worldwide suicide data. First, different data points are missing for different countries. Second, the quality of reporting of suicide data varies widely around the world. Third, some countries, like China and North Korea have extensive control over information and an incentive to report low rates. Suicide is also a very loaded term. Many suicides may be reported as accidental deaths, and failed suicides are also not reported. The tendency of suicide to be reported as accidental death likely varies widely around the world. In the word cloud, the data we could easily access was news headlines. These are generally attention grabbing, and not a good reflection of the actual content of the articles.
+
 
 ```{r leaflet, echo = FALSE}
 # mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
