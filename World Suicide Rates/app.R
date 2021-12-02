@@ -48,8 +48,8 @@ ui <- fluidPage(
     titlePanel("World Suicide Rates"),
 
     # Sidebar with a slider input for the year
-    sidebarLayout(
-        sidebarPanel(
+    fluidRow(
+      wellPanel(
             sliderInput("year",
                         "Year:",
                         min = 1990,
@@ -57,11 +57,12 @@ ui <- fluidPage(
                         value = 2017,
                         sep = "",
                         animate = animationOptions(interval = 750, loop = TRUE))
+      )
         ),
-
+    fluidRow(
         # Show a map of suicide rates
         mainPanel(
-           leafletOutput("map", height = 600)
+           leafletOutput("map", height = 600, width = 800)
         )
     )
 )
