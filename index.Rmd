@@ -146,7 +146,6 @@ ggplot(usSuicideRatesPost2000, aes(x = Year, y = SuicideDeathRate)) +
   * Male and female suicide rates per 100,000 people
   * The number of mental health beds available per 100,000 people
   
-To compare male and female suicide rates, we calculated the ratio of male suicide rate to female suicide rate. We combined these data sets together to look for meaningful correlations. The world bank publishes extensive data on historical and projected climate data. We downloaded an excel file with their historical temperature and precipitation data and extracted this to CSV files to explore the impact of temperature on suicide rates.
 
   To examine the geographic distribution of our data, we downloaded the TM_WORLD_BORDERS_SIMPL map data from http://thematicmapping.org, and joined our data sets to the geographic data based on the ISO3 country codes in the data. We used the leaflet package to create interactive maps of our data. To produce an interactive shiny app that explored the evolution of suicide rates over time, we massaged the data to get all years of suicide data into a single row for each country so that we could efficiently move through the years without redrawing the whole map.
   
