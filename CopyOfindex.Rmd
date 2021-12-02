@@ -337,11 +337,27 @@ leaflet(leafletSuicideData2016) %>%
   #  addLegend(pal = mypaletteDeathRate, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft") %>%
   addLegend(pal = mypaletteMaleFemale, values = ~MaleFemaleSuicideRatio, opacity = .7, title = "Male Female Ratio", position = "bottomleft")
 ```
+## A Deeper Dive into the United States
+### Motivations
+Now that we have explored the world, I wanted to take a deeper look at the United States and how we, as a country, handle suicide and the root causes behind it. By understanding how mental health and suicide play out in the United States, we can then identify causes and hence, help drive policy change to better the lives of all the people in the world.
 
+### Data
+For this deep dive into the United States, there were predominantly four data sources:
 
+  1. *StateData.CSV* - Downloaded csv from the CDC. This dataset contained suicide rates and deaths by suicide for each state.
+  2. *gunOwnership.csv* - Downloaded csv from the World Population review. This dataset contained data on the gun ownership percent in each state as well as the total guns in each state.
+  3. *State data package* - from the base R package that helped normalize the different ways states are represented in data (abbreviations, names, upper-case, lower-case, etc.)
+  4. *Map data* - from the maps package that was used to help visualize spatial data when converted into an 'sf' object
 
-#ROHIL
-##Map of suicide by state
+## Distribution of Suicide Rates
+
+### Methodology
+
+To create the plot shown in this section, I utilized the state dataset, map data, as well as StateData. the first things I had to do was to join the state info with the data in state data so that I could use that new dataset for the ultimate plotting of the map. After some wrangling, I was able to do this and then combine it with the map data and setting that dataset as a 'simple feature' object which is the standard data container for spatial data. after getting this dataset ready, it was just a matter of using ggplot and the aes functions to create a US Map that had each state colored based on the suicide rate in that state. I had also created an identical plot for total deaths by suicide but after looking at the output realized that plot did not show much other than the population density as states with higher populations naturally had higher suicide deaths than those with small populations. Lastly, I wanted to add some interactivity to the plot so that there was a hover feature that showed the exact rate in each state. To do this, I used the *plotly* package which allowed me to plot the map with *dynamicTicks* set to True which behaved the way I intended.
+
+### Analysis
+
+Before looking at the plot, I had no sense of where the suicide rates would be higher within the United States. Although, I had hypothesized that rates would be higher in more densely populated cities do to the fast-paced life that most people live in those areas. Therefore, when I saw the figure below, I was quite surprised to see the results.
 ```{r usMapParts, include=FALSE,fig.width = 8, fig.height = 4, fig.align="center"}
 data(state)
 #need a master dataset for state name, and abbreviations
@@ -390,12 +406,22 @@ x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
        title = "Suicide Rate (per 100,000 people) by State")
 theme_void()
 ```
-
+ 
 ```{r finalUSMap, echo = FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
 # plotting the plot object dynamically
 ggplotly(x, dynamicTicks = TRUE)
 ```
+As you can see above, the states with the highest suicide rates are Wyoming and Montana. Going further, it seems that the cluster around the center of the map (northwest of Texas) have the highest suicide rates by a significant margin. In contrast, the more populated areas of the USA actually have the lowest suicide rates. Places like New York, Massachusetts, California, and most of the Northeast have very low suicide rates compared to the rest of the country. These results were definitely not what i had expected and led me to wonder what led to this. The first thought I had was that these places in Central USA don't have many big cities and likely have less to do leading to more mental health issues. However, as I thought more deeply, I realized that one possible factor could be political orientation of these states. Most of these states are classified as "red" states and hence, have less gun control. Because 3 in 5 gun deaths are by suicide (source: efsgv.org), I wanted to explore if there was a link between gun ownership and the suicide rates displayed on the above map.
 
+## Distribution of Gun Ownership
+
+### Methodology
+
+The process of creating this plot was much the same as the plot describing suicide rates across the USA. Like above, the first step was to create a joined dataset that contained the map data, state data, and the gun ownership data from the *gunOwnership* dataset. After converting that into a sf object, I created the plot and displayed it using plotly to continue using the interactivity I created for the first map. therefore, the only difference between this plot and the one before was the data being displayed. In this map, the coloring of the map is based on the percentage of the state population that owns a gun. This statistic gives a bias-free measure of the prevalence of guns in each state while also taking into account the population of the state.
+
+### Analysis
+
+While looking at this map, I expected to see most of the South and central USA to have higher gun ownership rates. However, I was also looking to see if there was any correlation between this map and the above map.
 ```{r GunMapParts, include=FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
 #creating new dataset with all the information in one place
 gunDataNew <- gunData %>%
@@ -426,6 +452,11 @@ ggplotly(y, dynamicTicks = TRUE)
 
 ```
 
+  While looking at the above map, the first thing I noticed was the two highest states for gun ownership were, by far, Montana and Wyoming again. In addition, in accordance with my prediction, most of the central part of the USA as well as the south had the highest gun ownership rates. States typically classified as 'red" states like Texas, Louisiana, Oklahoma, etc, had significantly higher gun ownership rates than those states classified as "blue" such as California and most of the northeast. Although not the exact same, there are some very clear similarities between this map and the map of suicide rates that may show some correlation that will be further discussed in the next section.
+
+## Guns and Suicide in the USA
+
+  While looking at the suicide rate map and the gun ownership map together, there is some clear overlap that seems to suggest a correlation between these two variables. States like Montana and Wyoming both have the highest gun ownership rates as well as the highest suicide rates. On the other side, states like New Jersey and Massachusetts have the lowest gun ownership rates as well as some of the lowest suicide rates.     To explore this potential relationship further, I created a simple scatterplot to examine the relationship between gun ownership and suicide rate. I created this by using both *gunownership* and *statedata* datasets and then utilizing 'ggplot' to graph the relationship. In addition, I used the 'geom_text' feature to add labels to the plot for each state so that I can see which state is which in the plot.
 ```{r suicideGun, echo = FALSE, fig.width = 8, fig.height = 5, fig.align="center"}
 #wrangling
 suicideGun <- SuicideStateWithInfo %>%
@@ -435,7 +466,7 @@ suicideGun <- SuicideStateWithInfo %>%
   rename(id = state) %>%
   #joining with gun data
   left_join(gunDataNew, by = "id") %>%
-  #selecting the 3 important varibale to graph
+  #selecting the 3 important variable to graph
   select(id, RATE, gunOwnership) %>%
   #renaming for clarity
   rename(State = id, Rate = RATE)
@@ -449,4 +480,21 @@ ggplot(suicideGun, aes(x = gunOwnership, y = Rate)) +
   labs(x = "Gun Ownership (Percentage)", 
        y = "Suicide Rate (per 100,000)",
        title = "Suicide Rate vs Gun Ownership by US State")
-```
+```  
+  By looking at the above plot, There is a clear positive relationship between suicide rate and gun ownership. As Gun ownership increases, so too does the suicide rate in that state. The three states that jump out are Wyoming, Alaska, and Montana. This makes sense based on what we saw in the maps (Alaska was not included). In addition, the lowest points on this graph are Massachusetts and New Jersey which are also the ones we singled out during the observation of the maps. Therefore, There is a clear relationship between gun ownership and Suicide Rate and it is very possible that gun ownership may be one of the contributing factors to higher suicide rates in some states.
+  Although these relationships can, by no means, be classified as causal the overwhelming similarities displayed in this plot between gun ownership and suicide rate leads me to believe that there is a strong correlation between these variables. In addition, this deep dive into the United States has showed that one of the potential underlying reasons that some states may have higher suicide rates is gun ownership and by extension, political orientation of the state (due to differing gun control policies).
+  While this is a significant finding, I am not saying that gun ownership is the only reason behind differing suicide rates. There are many factors that contribute to this. We have seen many possible explanations for these suicide rates from the above sections such as temperature, world events (such as the fall of the Soviet union), and many others. Therefore, further research would be needed to find more possible explanations for suicide rates and other factors that may contribute to it. 
+  The identification of Gun Ownership as a potential explanation for higher suicide rates is a significant one because with further research, plots and data like this can be used to initiate institutional change aimed at reducing suicide and mental health issues. This type of research can help policy-makers glean important insights and hence, make policies aimed at the betterment of our society.
+
+## Limitations
+
+Although there were some insights and developments from this project, it is by no means a be all end all. There are some significant limitations in this research.
+  Firstly, as we could see on the scatterplot, Alaska seemed to have very high suicide rates as well as gun ownership rates but was not present on the two maps. This would be something that would make these maps far more convincing in presenting the point and in future research should be included in maps of the USA.
+  One other limitation was the lack of multiple years of data. All of this analysis was done using 2019 data and conclusions cannot be drawn from it without having more data from many years as well as running proper tests on the models. Future research would do well to have far more data and utilize it to present a larger picture of the suicide epidemic in which more relationships could be unearthed.
+  The next shortcoming of this project was the exploration of just one of the possible causes for differing suicide rate. Although the first map showed some states like Montana and Wyoming having the highest suicide rates, the only explanation given in this project was gun ownership although there may be a multitude of other reasons contributing to those rates. A more complete study could be done to explore more factors such as temperature, population, etc.
+  Lastly, This was a blog created by an Intro Data Science student. A more experienced Data Scientist would likely have more tools at their disposal to do a more thorough analysis and go through the proper testing techniques. Therefore, although these plots and maps have a lot of meaning and insights can be gleaned from them, more experience would likely create more informative plots that would show even more.
+
+## Conclusion
+
+Suicide has and will continue to be a tragic but prevalent part of our society. However, as humans and citizens of our world, we have an obligation to help minimize suicide numbers. This project has shown how suicide rates differ across the world as well as in the United States. In addition, we have dug deeper into the data with the goal of finding some factors that contribute to suicide such as temperature, gun ownership, sex, and global events. While none of this is definitive proof of any factor being a causal factor for suicide, what we hope this project has shown is that using the world of data around us, it is possible to dive deeper and find relationships that may help us in minimizing mental health crises and making the world a happier place. using this data in a variety of manners, we can show that there exist concrete changes we can make to help our world/country. With the help of data scientists and statisticians along with policy-makers around the world, this type of project (albeit on a much larger scale) can be used to find real links between certain factors and suicide. We hope that this project was as eye-opening to you all as it was to you and we hope this type of research continues to help minimizing suicide rates across the world!
+  
