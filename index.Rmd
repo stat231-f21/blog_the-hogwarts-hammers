@@ -493,8 +493,8 @@ Now that we have explored the world, I wanted to take a deeper look at the Unite
 ### Data
 For this deep dive into the United States, there were predominantly four data sources:
 
-  1. *StateData.CSV* - Downloaded csv from the CDC. This dataset contained suicide rates and deaths by suicide for each state.
-  2. *gunOwnership.csv* - Downloaded csv from the World Population review. This dataset contained data on the gun ownership percent in each state as well as the total guns in each state.
+  1. [Suicide Mortality Data](https://www.cdc.gov/nchs/pressroom/sosmap/suicide-mortality/suicide.htm) - Downloaded csv from the CDC. This dataset contained suicide rates and deaths by suicide for each state.
+  2. [Gun Ownership Data](https://worldpopulationreview.com/state-rankings/gun-ownership-by-state) - Downloaded csv from the World Population review. This dataset contained data on the gun ownership percent in each state as well as the total guns in each state.
   3. *State data package* - from the base R package that helped normalize the different ways states are represented in data (abbreviations, names, upper-case, lower-case, etc.)
   4. *Map data* - from the maps package that was used to help visualize spatial data when converted into an 'sf' object
 
@@ -502,7 +502,7 @@ For this deep dive into the United States, there were predominantly four data so
 
 ### Methodology
 
-To create the plot shown in this section, I utilized the state dataset, map data, as well as StateData. the first things I had to do was to join the state info with the data in state data so that I could use that new dataset for the ultimate plotting of the map. After some wrangling, I was able to do this and then combine it with the map data and setting that dataset as a 'simple feature' object which is the standard data container for spatial data. after getting this dataset ready, it was just a matter of using ggplot and the aes functions to create a US Map that had each state colored based on the suicide rate in that state. I had also created an identical plot for total deaths by suicide but after looking at the output realized that plot did not show much other than the population density as states with higher populations naturally had higher suicide deaths than those with small populations. Lastly, I wanted to add some interactivity to the plot so that there was a hover feature that showed the exact rate in each state. To do this, I used the *plotly* package which allowed me to plot the map with *dynamicTicks* set to True which behaved the way I intended.
+To create the plot shown in this section, I utilized the state dataset, map data, as well as Suicide Mortality Data. the first things I had to do was to join the state info with the data in the suicide mortality data so that I could use that new dataset for the ultimate plotting of the map. After some wrangling, I was able to do this and then combine it with the map data and setting that dataset as a 'simple feature' object which is the standard data container for spatial data. after getting this dataset ready, it was just a matter of using ggplot and the aes functions to create a US Map that had each state colored based on the suicide rate in that state. I had also created an identical plot for total deaths by suicide but after looking at the output realized that plot did not show much other than the population density as states with higher populations naturally had higher suicide deaths than those with small populations. Lastly, I wanted to add some interactivity to the plot so that there was a hover feature that showed the exact rate in each state. To do this, I used the *plotly* package which allowed me to plot the map with *dynamicTicks* set to True which behaved the way I intended.
 
 ### Analysis
 
@@ -551,9 +551,8 @@ x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
   geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1) +
   #adding legend title and title
-  labs(fill = "Suicide Rate",
-       title = "Suicide Rate (per 100,000 people) by State")
-theme_void()
+  labs(fill = "Suicide Rate") +
+  theme_void()
 ```
  
 ```{r finalUSMap, echo = FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
@@ -590,9 +589,8 @@ y <- ggplot(graphs_map_guns, aes(fill = gunOwnership, text = paste("State: ", st
   geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1) +
   #adding title and legend title
-  labs(fill = "Gun Ownership",
-       title = "Percentage of Gun Owners by State")
-theme_void()
+  labs(fill = "Gun Ownership") +
+  theme_void()
 ```
 
 ```{r finalGunMap, echo= FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
