@@ -5,9 +5,9 @@ account: vkuntz23
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 5238312
-bundleId: 5317595
+bundleId: 5347057
 url: https://vkuntz23.shinyapps.io/WorldSuicideRates/
-when: 1638421121.83349
-lastSyncTime: 1638421121.8335
+when: 1638996053.77364
+lastSyncTime: 1638996053.77367
 asMultiple: FALSE
 asStatic: FALSE

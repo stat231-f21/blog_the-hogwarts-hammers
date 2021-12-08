@@ -1,0 +1,51 @@
+YEAR,state,RATE,DEATHS,region,id,gunOwnership,totalGuns
+2019,AL,16.3,804,South,alabama,0.555,161641
+2019,AK,28.5,210,West,alaska,0.645,15824
+2019,AZ,18.7,1419,West,arizona,0.463,179738
+2019,AR,18,548,South,arkansas,0.572,79841
+2019,CA,10.7,4436,West,california,0.283,344622
+2019,CO,22.1,1312,West,colorado,0.451,92435
+2019,CT,11.4,435,Northeast,connecticut,0.236,82400
+2019,DE,11.3,111,South,delaware,0.344,4852
+2019,FL,14.5,3465,South,florida,0.353,343288
+2019,GA,14.6,1585,South,georgia,0.492,190050
+2019,HI,15.5,224,West,hawaii,0.149,7859
+2019,ID,20.4,365,West,idaho,0.601,49566
+2019,IL,10.9,1439,North Central,illinois,0.278,146487
+2019,IN,14.2,972,North Central,indiana,0.448,114019
+2019,IA,16.7,528,North Central,iowa,0.436,28494
+2019,KS,18.2,523,North Central,kansas,0.489,52634
+2019,KY,16.5,756,South,kentucky,0.546,81058
+2019,LA,15,704,South,louisiana,0.531,116831
+2019,ME,19.4,276,Northeast,maine,0.468,15371
+2019,MD,10.3,657,South,maryland,0.302,103109
+2019,MA,8.7,647,Northeast,massachusetts,0.147,37152
+2019,MI,14.3,1472,North Central,michigan,0.402,65742
+2019,MN,14.4,830,North Central,minnesota,0.428,79307
+2019,MS,14.4,436,South,mississippi,0.558,35494
+2019,MO,18.2,1141,North Central,missouri,0.488,72995
+2019,MT,26.2,289,West,montana,0.663,22133
+2019,NE,16.1,309,North Central,nebraska,0.452,22234
+2019,NV,19.8,642,West,nevada,0.473,76888
+2019,NH,17.5,255,Northeast,new hampshire,0.411,64135
+2019,NJ,8,762,Northeast,new jersey,0.147,57505
+2019,NM,24,513,West,new mexico,0.462,97580
+2019,NY,8.3,1705,Northeast,new york,0.199,76207
+2019,NC,12.5,1358,South,north carolina,0.458,152238
+2019,ND,18.1,136,North Central,north dakota,0.551,13272
+2019,OH,15.1,1806,North Central,ohio,0.4,173405
+2019,OK,20.5,816,South,oklahoma,0.547,71269
+2019,OR,20.4,906,West,oregon,0.508,61383
+2019,PA,14.1,1896,Northeast,pennsylvania,0.407,236377
+2019,RI,10.7,123,Northeast,rhode island,0.148,4223
+2019,SC,16.2,852,South,south carolina,0.494,105601
+2019,SD,20.9,182,North Central,south dakota,0.553,21130
+2019,TN,17.2,1219,South,tennessee,0.516,99159
+2019,TX,13.4,3891,South,texas,0.457,588696
+2019,UT,21.2,654,West,utah,0.468,72856
+2019,VT,16,110,Northeast,vermont,0.505,5872
+2019,VA,12.8,1140,South,virginia,0.446,307822
+2019,WA,15.9,1263,West,washington,0.421,91835
+2019,WV,18.5,330,South,west virginia,0.585,35264
+2019,WI,14,845,North Central,wisconsin,0.453,64878
+2019,WY,29.3,170,West,wyoming,0.662,132806

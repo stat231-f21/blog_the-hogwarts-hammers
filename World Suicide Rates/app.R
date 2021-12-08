@@ -1,13 +1,4 @@
 
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    http://shiny.rstudio.com/
-#
-
 library(shiny)
 library(readr)
 library(leaflet)
@@ -15,14 +6,17 @@ library(dplyr)
 library(rgdal)
 library(RColorBrewer)
 
+# Read in data
 suicideData <- read_csv('suicideRatesWideYears.csv')
 leafletData <- readOGR(
     dsn = paste0(getwd(), "/data/LeafletData"),
     layer = "TM_WORLD_BORDERS_SIMPL-0.3",
     verbose = FALSE
 )
-leafletSuicideData <- merge(leafletData, suicideData, by = "ISO3") 
+leafletSuicideData <- merge(leafletData, suicideData, by = "ISO3")
+# Create bins by suicide rate range
 mybins <- c(0,1,2,5,7,10,12, 15, 20, 25, 30, 50, 100)
+# Assign colors to these bins
 myPalette <- colorBin( 
     palette=c("#333399",
               "#555599", 
@@ -41,7 +35,7 @@ myPalette <- colorBin(
     bins = mybins
 )
 
-# Define UI for application that draws a histogram
+# Define UI for application that draws a map
 ui <- fluidPage(
 
     # Application title
@@ -56,6 +50,8 @@ ui <- fluidPage(
                         max = 2017,
                         value = 2017,
                         sep = "",
+                        # Add a button to animate through the years, changing
+                        # years every 750ms in a loop
                         animate = animationOptions(interval = 750, loop = TRUE))
       )
         ),
@@ -78,10 +74,16 @@ server <- function(input, output) {
         leaflet(leafletSuicideData) %>%
             addTiles() %>%
             setView(lat = 30, lng = 0, zoom = 1.5) %>%
-            addLegend(pal = myPalette, values = leafletSuicideData$Rate2017, opacity = .7, title = "Suicide Death Rate<br/>Per 100k", position = "bottomleft")
+            addLegend(pal = myPalette, 
+                      values = leafletSuicideData$Rate2017, 
+                      opacity = .7, 
+                      title = "Suicide Death Rate<br/>Per 100k", 
+                      position = "bottomleft")
     })
     
-    
+    # Add the actual data to the map in observe. Doing it this way
+    # gets rid of the flickering that would happen if we redrew
+    # the whole map every time data changed
     observe({
         # Select the right column based on the selected year        
         selectedData = switch(as.character(input$year),
@@ -115,48 +117,35 @@ server <- function(input, output) {
          "2017" = leafletSuicideData$Rate2017
          )
 
+        # Create the text for the popup that shows the country name and suicide rate
         hoverText <- 
-            paste(
-              "Country: ", leafletSuicideData@data$NAME, "<br/>",
-               "Suicide Rate (", 
-                     input$year, 
-                     "): ", selectedData, "<br/>",
-                     sep = "") %>%
-                     lapply(htmltools::HTML)
+            paste("Country: ", leafletSuicideData@data$NAME, "<br/>",
+                  "Suicide Rate (", input$year, "): ", selectedData, "<br/>",
+                  sep = "") %>%
+          lapply(htmltools::HTML)
             
+        # Use the leaflet proxy to add the data to the map
         leafletProxy('map', data = leafletSuicideData) %>%
+            # Clear the existing circles from the map first
             clearGroup("circles") %>%
+            # Add circles colored and sized by the suicide rate for each country
             addCircles(
                 lat = leafletSuicideData$LAT, lng = leafletSuicideData$LON,
+                # Create circle size
                 radius = selectedData * 10000,
+                # Fill circle and define opacity
                 opacity = 1,
                 fillOpacity = .7,
                 weight = 1,
                 group = "circles",
                 color = myPalette(selectedData),
                 fillColor = myPalette(selectedData),
+                # Create hover text
                 label = hoverText,
                 labelOptions = labelOptions(
                     style = list("font-weight" = "normal", padding = "3px 8px"),
                     textsize = "13px",
-                    direction = "auto"
-                )
-            ) 
-            # addPolygons(
-            #     fillColor = ~ myPalette(selectedData),
-            #     stroke = TRUE,
-            #     fillOpacity = 1,
-            #     color = "white",
-            #     weight = 1,
-            #     label = hoverText(),
-            #     labelOptions = labelOptions(
-            #         style = list("font-weight" = "normal", padding = "3px 8px"),
-            #         textsize = "13px",
-            #         direction = "auto"
-            #     )
-            # ) 
-
-            
+                    direction = "auto")) 
     })
 }
 

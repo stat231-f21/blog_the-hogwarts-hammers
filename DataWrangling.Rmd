@@ -15,18 +15,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r reading-data, eval = TRUE, include = FALSE}
+# Read in the raw data for temperatures by country
+temperatureData <- read_csv("data/Country_temperatureCRU.csv", show_col_types = FALSE)
+# Read in the raw data of mental health beds per 100k by country
 MHBeds <- read_csv("data/mental-health-hospital.csv", show_col_types = FALSE)
+# Read in the raw data on suicide rates by state
 suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
   rename(id = "STATE")
-maleFemaleRatio <- read_csv("data/Male-Female-Ratio-of-Suicide-Rates.csv")
+# Read in the raw data on suicide death rates by country
 suicideRate <- read_csv("data/suicide-death-rates.csv", show_col_types = FALSE)
+gunData <- read_csv("data/gunOwnership.csv", show_col_types = FALSE)
 ```
 
 
 ```{r wrangling, include = FALSE}
 # Rename country codes and years and drop unnecessary columns so that all data sets match
-maleFemaleRatio <- maleFemaleRatio %>%
-  mutate(ISO3 = Code)
 suicideRate <- suicideRate %>%
   mutate(ISO3 = Code)
 MHBeds <- MHBeds %>%
@@ -53,31 +56,75 @@ bedData2016 <- full_join(MHBedsInMHHospitals, full_join(MHBedsInGeneralHospitals
   mutate(TOTAL_BEDS = BEDS_IN_MENTAL_HOSPITALS + BEDS_IN_GENERAL_HOSPITALS + BEDS_IN_COMMUNITY_FACILITIES) %>%
   filter(Year == 2016)
 
+# Change column names and add a year so that temperature data can be merged with suicide data
+temperatureData <- temperatureData %>%
+  select(ISO_3DIGIT, Annual_temp) %>%
+  rename(ISO3 = ISO_3DIGIT, TEMP = Annual_temp) %>%
+  mutate(Year = 2016)
 # Join together all data sets into a single data set for display
-suicideData <- full_join(suicideRate, maleFemaleRatio)
-suicideData <- full_join(suicideData, bedData2016)
+suicideData <- full_join(suicideRate, bedData2016)
+suicideData <- full_join(suicideData, temperatureData)
+
+# Write the wrangled world suicide data to a file
 write_csv(suicideData, "fullSuicideData.csv")
 
-maleFemaleRatio2017 <- maleFemaleRatio %>%
-  filter(Year == "2017")
+# Pull in standard state data
+data(state)
+# Create a master dataset for state name, and abbreviations
+state_info <- data.frame(
+  Region = state.region,
+  # Match state variable name in map data
+  state = tolower(state.name),
+  # Match state variable name in summary data
+  id = state.abb)
+# Add a lower-case state variable to the gun data to join it to the state info
+gunDataNew <- gunData %>%
+  # capitalization change for join below
+  mutate(state = tolower(State))
+
+# creating one dataset where all the suicide info will be
+SuicideStateWithInfo <- suicideState %>%
+  # added in state name and abbreviations
+  left_join(state_info, by = "id") %>%
+  # only want the most recent year (one year of data)
+  filter(YEAR == "2019") %>%
+  # join in the gun dadta
+  left_join(gunDataNew, by = "state") %>%
+  # Select the columns we are interested in
+  select(c("YEAR", "id", "RATE", "DEATHS", "Region", "state", "gunOwnership", "totalGuns")) %>%
+  # renaming the id columns so that future joins work
+  rename(region = "Region", state = "id", id = "state")
+
+# Write the wrangled state suicide data to a file
+write_csv(SuicideStateWithInfo, "SuicideStateWithInfo.csv")
 ```
 
 
-```{r, include = FALSE}
-# Get all years into one row of the data frame
+```{r wideSuicideData, include = FALSE}
+# Get all years into one row of the data frame for the shiny app
 wideSuicideData <- NULL
+# For each year, add a column for the suicide rate for that year
 for (year in 1990:2017) {
+  # Get the suicide rates for the year, and select the country code and rate
+  # Drop rows with NA values.
   dataForYear <-
     suicideData %>%
     filter(Year == year) %>%
     select(ISO3, SuicideDeathRate) %>%
     drop_na()
+  # Construct a column name for the year (e.g. Rate2017)
   rateName <- paste("Rate", year, sep = "")
+  # Set the value in the column
   dataForYear[rateName] <- dataForYear$SuicideDeathRate
-  dataForYear <- dataForYear %>% select("ISO3", rateName)
+  # Select just the country code and the rate column for the year
+  dataForYear <- dataForYear %>% 
+    select("ISO3", rateName)
+  # If we haven't yet created the wide suicide data, create it
   if (is.null(wideSuicideData)) {
     wideSuicideData <- dataForYear
   } else {
+    # If the wide suicide data already exists, join with the data for the
+    # year to add the new column
     wideSuicideData <- full_join(wideSuicideData, dataForYear, by = c("ISO3"))
   }
 }
@@ -85,24 +132,25 @@ write_csv(wideSuicideData, "suicideRatesWideYears.csv")
 ```
 
 
-```{r, message=FALSE, echo=FALSE, warning=FALSE}
+```{r wordCloudFunction, message=FALSE, echo=FALSE, warning=FALSE}
+# This function pulls down the headlines for news articles starting on startDate
+# and going for yearCount years. It makes a separate call to the google RSS
+# search for each interval number of days to avoid losing data due to the 100
+# result maximum on the RSS API. It searches based on the passed-in searchTerm
+# and country, and removes the specified list of words from the results.
 getNewsWordCloud <- function(startDate, yearCount, interval, searchTerm, wordsToRemove, country) {
+  # Create an initial data frame
   allTitles <- data.frame()
-  print(startDate)
-  print(yearCount)
-  print(interval)
-  print(searchTerm)
-  print(wordsToRemove)
-  print(country)
-  # Loop over two day periods in 2014 and 2015 to get all headlines. Google RSS feed is limited to 100
-  # headlines, so we will miss articles if we go with longer time periods
 
+  # Calculate the numberof intervals
   numIntervals <- as.integer(yearCount * 365 / interval)
 
-  for (day in 1:numIntervals) {
+  for (i in 1:numIntervals) {
+    # Calculate the next date
     nextDate <- startDate + interval
-    print(paste("Getting articles from", startDate, "to", nextDate))
+    # Construct a search URL
     newsUrl <- URLencode(paste0("https://news.google.com/rss/search?q=", searchTerm, "+after:", startDate, "+before:", nextDate, "&ceid=", country, "&gl=", country))
+    # Get the titles from Google
     scrapedTitles <- tryCatch(
       # Some days have no articles. Handle the error so that the scrape doesn't crash
       error = function(cnd) {
@@ -113,14 +161,20 @@ getNewsWordCloud <- function(startDate, yearCount, interval, searchTerm, wordsTo
         select(item_title)
     )
 
-    print(paste("Got ", nrow(scrapedTitles), "articles"))
+    # Add the titles to our list of titles
     allTitles <- allTitles %>% rbind(scrapedTitles)
+    # Increment the start date for the next pass through the loop
     startDate <- nextDate
   }
-  # Remove names of sources
+  
+  # Remove names of sources (separated by | and - at the end of the title)
   allTitles <- allTitles %>%
     mutate(item_title = gsub(" *-[^-]*$", "", item_title)) %>%
     mutate(item_title = gsub(" *\\|.*$", "", item_title))
+  
+  # Remove whitespace, puntuation and numbers from the titles and convert
+  # them to lower case. Also remove stop words (a, the, ...) and any
+  # words that the caller requested be removed
   processedTitles <- Corpus(VectorSource(allTitles$item_title)) %>%
     tm_map(stripWhitespace) %>%
     tm_map(removePunctuation) %>%
@@ -128,8 +182,8 @@ getNewsWordCloud <- function(startDate, yearCount, interval, searchTerm, wordsTo
     tm_map(content_transformer(tolower)) %>%
     tm_map(removeWords, stopwords("english")) %>%
     tm_map(removeWords, wordsToRemove)
-  # tm_map(removeWords, c("suicide", "news", "times", "suicides"))
 
+  # Convert the word map into a dataframe with words and frequencies
   termDocumentMatrix <- TermDocumentMatrix(processedTitles)
   matrix <- as.matrix(termDocumentMatrix)
   words <- sort(rowSums(matrix), decreasing = TRUE)
@@ -139,10 +193,10 @@ getNewsWordCloud <- function(startDate, yearCount, interval, searchTerm, wordsTo
 ```
 
 
-```{r}
+```{r wordCcloud}
+# Search the US news for the terms "mental health" and "needs" from 2014-2017.
 usMentalHealthNeeds <- getNewsWordCloud(as.Date('2014-01-01'), 3, 30, "+\"mental health\"+needs", c("mental", "health"),  "US")
+# Write the word frequencies to a file
 write.csv(usMentalHealthNeeds, 'USMentalHealthNeedsWords.csv')
-greatBritainMentalHealthNeeds <- getNewsWordCloud(as.Date('2014-01-01'), 3, 30, "+\"mental health\"+needs", c("mental", "health"), "GB")
-write.csv(greatBritainMentalHealthNeeds, "GBMentalHealthNeedsWords.csv")
 ```
 

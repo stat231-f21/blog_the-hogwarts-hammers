@@ -10,6 +10,7 @@ output:
 ---
 
 ```{r setup, include = FALSE}
+# Load in necessary packages
 library(tidyverse)
 library(kableExtra)
 library(viridis)
@@ -25,8 +26,6 @@ library(widgetframe)
 library(wordcloud)
 library(wordcloud2)
 
-# for example code; delete if not needed
-
 # Set code chunk defaults
 knitr::opts_chunk$set(
   echo = FALSE,
@@ -40,25 +39,28 @@ options(knitr.kable.NA = "")
 ```
 
 ```{r dataLoading, echo = FALSE, message = FALSE, warning = FALSE}
+# Read in suicide rate data
 suicideRate <- read_csv("data/suicide-death-rates.csv", show_col_types = FALSE)
-
+# Read in geographic data for leaflet
 leafletData <- readOGR(
   dsn = paste0(getwd(), "/data/LeafletData"),
   layer = "TM_WORLD_BORDERS_SIMPL-0.3",
   verbose = FALSE
 )
-
+# Read in the data combining suicide rates and hospital beds
 suicideData <- read.csv("fullSuicideData.csv")
-
+# Create data set with only 2016 data
 suicideData2016 <- suicideData %>%
   filter(Year == "2016")
-
+# Create data set with leaflet data and 2016 suicide data
 leafletSuicideData2016 <- merge(leafletData, suicideData2016, by = "ISO3")
-
-suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
-  rename(id = "STATE")
-
-gunData <- read_csv("data/gunOwnership.csv")
+# Read in the news word distributions for the terms "mental", "health", and "needs"
+usMentalHealthNeeds <- read.csv("data/USMentalHealthNeedsWords.csv")
+# Create data set with suicide rate data in the US after 2000
+usSuicideRatesPost2000 <- suicideRate %>%
+  filter(Code == "USA", Year >= 2000)
+# Read in data on suicides and guns by state in the US
+SuicideStateWithInfo <- read_csv("SuicideStateWithInfo.csv", show_col_types = FALSE) 
 ```
 
 ## Motivation
@@ -67,30 +69,29 @@ gunData <- read_csv("data/gunOwnership.csv")
 Suicide is regularly in the news. We hear about the uniquely American problem of guns in assisting suicide and about the shortage of mental health beds across the world. The goal of this blog was to get some hard data and look at how the issue of suicide varies across the world. What role, if any, do guns play in suicide rate? What role, if any, does the availability of mental health beds play in suicide rate? The aim of our blog is to inform readers about suicide around the world and within the US and to explore several trends and variables contributing to suicide deaths. 
  
 ```{r usSuicideRates}
-usSuicideRatesPost2000 <- suicideRate %>%
-  filter(Code == "USA", Year >= 2000)
+# Create a line plot of suicide rates in the US after 2000
 ggplot(usSuicideRatesPost2000, aes(x = Year, y = SuicideDeathRate)) +
-  labs(
-    y = "Suicide death rate per 100,000 people",
-    title = "Suicide Death rates in the US through time"
-  ) +
+  labs(y = "Suicide death rate per 100,000 people", 
+       title = "Suicide Death rates in the US through time") +
   geom_line()
 ```
 
 ## Data 
   In order to look into suicide across the world, we pulled together multiple data sets. The World Health organization has extensive data on mental health and suicide. These include:
   
-  * Suicide rates per 100,000 people
-  * Male and female suicide rates per 100,000 people
-  * The number of mental health beds available per 100,000 people
+  * [Suicide rates per 100,000 people](https://apps.who.int/gho/data/view.main.MHSUICIDEREGv?lang=en)
+  * [The number of mental health beds available per 100,000 people](https://apps.who.int/gho/data/node.main.MHBEDS?lang=en)
   
 
-  To examine the geographic distribution of our data, we downloaded the TM_WORLD_BORDERS_SIMPL map data from http://thematicmapping.org, and joined our data sets to the geographic data based on the ISO3 country codes in the data. We used the leaflet package to create interactive maps of our data. To produce an interactive shiny app that explored the evolution of suicide rates over time, we massaged the data to get all years of suicide data into a single row for each country so that we could efficiently move through the years without redrawing the whole map.
+  To examine the geographic distribution of our data, we downloaded the [TM_WORLD_BORDERS_SIMPL map data](http://thematicmapping.org), and joined our data sets to the geographic data based on the ISO3 country codes in the data. We used the leaflet package to create interactive maps of our data. To produce an interactive shiny app that explored the evolution of suicide rates over time, we massaged the data to get all years of suicide data into a single row for each country so that we could efficiently move through the years without redrawing the whole map.
   
-  To examine the headlines in the news, we used Google's news RSS API feed. This API allows us to search Google news and get a list of headlines matching a search term from a particular country for a particular point in time. Because the API returns a maximum of 100 rows per query, we had to break a three year period into one month periods and combine the data together.
+  To examine how suicide rates correlated with varying temperatures, we downloaded worldwide average temperature data from the [World Bank Climate Change Knowledge Portal](https://climateknowledgeportal.worldbank.org/download-data). 
+  
+  To examine the headlines in the news, we used [Google's news RSS API feed](https://www.aakashweb.com/articles/google-news-rss-feed-url/). This API allows us to search Google news and get a list of headlines matching a search term from a particular country for a particular point in time. Because the API returns a maximum of 100 rows per query, we had to break a three year period into one month periods and combine the data together.
+  
   
 ## Limitations
-There are a number of limiations of looking at worldwide suicide data. First, different data points are missing for different countries. Second, the quality of reporting of suicide data varies widely around the world. Third, some countries, like China and North Korea have extensive control over information and an incentive to report low rates. Suicide is also a very loaded term. Many suicides may be reported as accidental deaths, and failed suicides are also not reported. The tendency of suicide to be reported as accidental death likely varies widely around the world. In the word cloud, the data we could easily access was news headlines. These are generally attention grabbing, and not a good reflection of the actual content of the articles.
+There are a number of limitations of looking at worldwide suicide data. First, different data points are missing for different countries. Second, the quality of reporting of suicide data varies widely around the world. Third, some countries, like China and North Korea have extensive control over information and an incentive to report low rates. Suicide is also a very loaded term. Many suicides may be reported as accidental deaths, and failed suicides are also not reported. The tendency of suicide to be reported as accidental death likely varies widely around the world. In the word cloud, the data we could easily access was news headlines. These are generally attention grabbing, and not a good reflection of the actual content of the articles.
 
   
 ## Suicide Rates Around the World
@@ -98,54 +99,62 @@ There are a number of limiations of looking at worldwide suicide data. First, di
   
 <center><h3>Death rate from suicides, 2016</center></h3>
   
-```{r, echo=FALSE}
+```{r 2016Leaflet, echo=FALSE}
+# Create bins with ranges of suicide rates
 mybins <- c(0, 1, 2, 5, 7, 10, 12, 15, 20, 25, 30, 50, 100)
+# Assign a color to each bin
 myPalette <- colorBin(
-  palette = c(
-    "#333399",
-    "#555599",
-    "#777799",
-    "#999999",
-    "#ffcccc",
-    "#ffaaaa",
-    "#ff9999",
-    "#ff7777",
-    "#cc5555",
-    "#aa0000",
-    "#550000",
-    "#330000"
-  ),
+  palette = c("#333399",
+              "#555599",
+              "#777799",
+              "#999999",
+              "#ffcccc",
+              "#ffaaaa",
+              "#ff9999",
+              "#ff7777",
+              "#cc5555",
+              "#aa0000",
+              "#550000",
+              "#330000"),
   domain = leafletSuicideData2016,
   na.color = "transparent",
-  bins = mybins
-)
+  bins = mybins)
+# Defining the text that will appear when the mouse hovers over a country
 hoverText <-
-  paste(
-    "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
-    "Suicide Rate (2016): ", leafletSuicideData2016$SuicideDeathRate, "<br/>",
-    sep = ""
-  ) %>%
+  paste("Country: ", leafletSuicideData2016@data$NAME, "<br/>",
+        "Suicide Rate (2016): ", leafletSuicideData2016$SuicideDeathRate, "<br/>",
+        sep = "") %>%
   lapply(htmltools::HTML)
+# Creating world map of suicide rate per 100,000 in 2016
 leaflet(leafletSuicideData2016) %>%
   addTiles() %>%
+  # Set the view to fit the whole world
   setView(lat = 30, lng = 0, zoom = 1.5) %>%
-  addLegend(pal = myPalette, values = leafletSuicideData2016$SuicideDeathRate, opacity = .7, title = "Suicide Death Rate<br/>Per 100k", position = "bottomleft") %>%
-  addCircles(
-    lat = leafletSuicideData2016$LAT, lng = leafletSuicideData2016$LON,
-    radius = leafletSuicideData2016$SuicideDeathRate * 10000,
-    opacity = 1,
-    fillOpacity = .7,
-    weight = 1,
-    group = "circles",
-    color = myPalette(leafletSuicideData2016$SuicideDeathRate),
-    fillColor = myPalette(leafletSuicideData2016$SuicideDeathRate),
-    label = hoverText,
-    labelOptions = labelOptions(
-      style = list("font-weight" = "normal", padding = "3px 8px"),
-      textsize = "13px",
-      direction = "auto"
-    )
-  )
+  # Add the legend of colors and bins defined above
+  addLegend(pal = myPalette, 
+            values = leafletSuicideData2016$SuicideDeathRate, 
+            opacity = .7, 
+            title = "Suicide Death Rate<br/>Per 100k", 
+            position = "bottomleft") %>%
+  # Add circles whose color and size varries by suicide rate
+  addCircles(lat = leafletSuicideData2016$LAT, lng = leafletSuicideData2016$LON,
+             # Set size of circle
+             radius = leafletSuicideData2016$SuicideDeathRate * 10000,
+             # Set the opacity of circle and rim
+             opacity = 1,
+             fillOpacity = .7,
+             weight = 1,
+             group = "circles",
+             # Set the color of circles
+             color = myPalette(leafletSuicideData2016$SuicideDeathRate),
+             fillColor = myPalette(leafletSuicideData2016$SuicideDeathRate),
+             # Put hover text
+             label = hoverText,
+             # Set styling of hover text
+             labelOptions = labelOptions(style = list("font-weight" = "normal", 
+                                                      padding = "3px 8px"),
+                                         textsize = "13px",
+                                         direction = "auto"))
 ```
 
 
@@ -158,7 +167,8 @@ This map was produced by filtering the WHO suicide rate data down to just 2016, 
   Before we look at what factors influence these suicide rates, lets see whether the patterns we are seeing are true across time or just in 2016. Are there more time relevant factors that come into play? 
   In order to look into suicide rates over time, we created a Shiny app. The app includes a slider of years. You can slide the bar to whichever year you would like to explore. Clicking the play button under the slider will automate the movement of the slider consecutively through the years. The map will change accordingly. 
   
-<iframe height="800" width="100%" frameborder="no" src="https://vkuntz23.shinyapps.io/WorldSuicideRates/"> </iframe>
+  
+<iframe height="850" width="100%" frameborder="no" src="https://vkuntz23.shinyapps.io/WorldSuicideRates/"> </iframe>
 
 
 <br> Looking at this shiny app, we can see that, for the most part, the trends we saw in the 2016 map hold. In addition, we can see a few new anomalies. Most noticeably, in 1993, right after the economic crash post the fall of the Soviet Union, the entire former Soviet Union sees a rapid increase in suicide rates across the board. In addition, looking more closely at Iraq, in 2005, suicide rates begin to quickly decrease. In 2005, the US pulled their troops out of Iraq. These events likely had an impact on the general well being of the residents of these countries and played a role in increasing and decreasing suicide rates. As you might expect, the military and economic changes in countries seem to have an impact on suicide rate. 
@@ -173,19 +183,17 @@ This data in this shiny app was displayed the same way as our earlier map data. 
 ### A look at the relationship between suicide and temperature
 
 Our first thought when trying to figure out what connected the mid-world countries was that they were generally in the center of the world and latitude might be a causing factor. In particular, number of hours of light in a day. However, if you look closely, this band of countries is actually north of the equator which wouldn't make sense if it's about hours of light in a day. If it were, we would expect this band to be straight across the equator. Our next thought was that temperature could have an affect on suicide rate. To explore this relationship, we created a scatter plot comparing the average temperature in each country to its suicide rate per 100,000 people. 
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
-temperatureData <- read.csv("data/Country_temperatureCRU.csv") %>%
-  select(ISO_3DIGIT, Annual_temp) %>%
-  rename(ISO3 = ISO_3DIGIT, TEMP = Annual_temp)
-deathRateTemperatureData2016 <- left_join(suicideData2016, temperatureData)
-ggplot(deathRateTemperatureData2016, aes(x = SuicideDeathRate, y = TEMP)) +
+```{r temperaturePlot, echo=FALSE, message=FALSE, warning=FALSE}
+# Create a scatter plot of temperature vs suicide death rate
+ggplot(suicideData2016, aes(x = SuicideDeathRate, y = TEMP)) +
+  # Set x axis
   xlim(0, 33.5) +
-  labs(
-    title = "How temperature impacts suicide rate",
-    y = "Temperature (Celsius)",
-    x = "Suicide death rate per 100,000"
-  ) +
+  # Add title and axis titles
+  labs(title = "How temperature impacts suicide rate",
+       y = "Temperature (Celsius)",
+       x = "Suicide death rate per 100,000") +
   geom_point() +
+  # Add a fit line
   geom_smooth(method = lm)
 ```
 
@@ -197,178 +205,41 @@ Although we can't explore all of them, external factors clearly play an importan
 In order to get an idea of what the United States thinks is needed to improve suicide rates, we created a word cloud. This word cloud shows the most common words in articles that discuss mental health needs in the title by searching a Google news rss feed. 
 
 
-
-```{r, message=FALSE, warning=FALSE, echo=FALSE}
-usMentalHealthNeeds <- read.csv("data/USMentalHealthNeedsWords.csv")
-greatBritainMentalHealthNeeds <- read.csv("data/GBMentalHealthNeedsWords.csv")
-```
-
-
-```{r, message=FALSE, warning=FALSE, echo=FALSE}
+```{r wordCloud, message=FALSE, warning=FALSE, echo=FALSE}
+# Set the seed so I get the same word cloud every time
 set.seed(3000)
-wordcloud(words = usMentalHealthNeeds$word, freq = usMentalHealthNeeds$freq, min.freq = 1, max.words = 100, rot.per = 0.35, colors = brewer.pal(8, "Dark2"))
+# Create word cloud with the words "mental", "health", and "needs" in the title
+wordcloud(words = usMentalHealthNeeds$word, 
+          freq = usMentalHealthNeeds$freq, 
+          min.freq = 1, 
+          max.words = 100, 
+          rot.per = 0.35, 
+          colors = brewer.pal(8, "Dark2"))
 ```
 
 <br> Some of the most common words seen in the word cloud above are illness, hospital, care, and treatment, all of which relate to mental health care. Based solely on the words most used in news articles relating to mental health needs, we can see that an increase in mental health care is desired. What does an increase in mental health care mean? It could mean more school programs exploring mental health, more therapists, or even more hospital beds. We chose to explore what relationship number of hospital beds had with suicide rate. The US thinks we need more hospitals, do more hospitals correlate with lower suicide rates? 
 
 #### Methodology
-To create these word clouds, we first had to get years worth of news headlines from the Google News RSS feed. In order to try lots of different variations of search terms, we created a function that allowed us to pull data from any period of time with any search terms for any country. We had to break our time periods into small time periods so that no time period had more than 100 headlines. These headlines had journal names at the end of them, so we had to remove those first so that the journal names weren't the most common words. We then created a Corpus of the headlines using the tm pacakge, and removed all whitespace, punctuation, numbers and stop words (and, the, a, ...) from the data. We used a TermDocumentMatrix to get a set of terms, and transformed that into a data frame with words and frequencies. This was what we needed to use the wordcloud package to display a word cloud.
+To create these word clouds, we first had to get years worth of news headlines from the Google News RSS feed. In order to try lots of different variations of search terms, we created a function that allowed us to pull data from any period of time with any search terms for any country. We had to break our time periods into small time periods so that no time period had more than 100 headlines. These headlines had journal names at the end of them, so we had to remove those first so that the journal names weren't the most common words. We then created a Corpus of the headlines using the tm package, and removed all white space, punctuation, numbers and stop words (and, the, a, ...) from the data. We used a TermDocumentMatrix to get a set of terms, and transformed that into a data frame with words and frequencies. This was what we needed to use the wordcloud package to display a word cloud.
 
 
 ### Does having more mental health hospital beds actually correlate with lower suicide rates?
   To explore this relationship we created another scatter plot, this time relating number of hospital beds per country in 2016 to suicide rate per 100,000 in 2016. 
-```{r, warning=FALSE, message=FALSE, echo=FALSE}
+```{r bedsSuicide, warning=FALSE, message=FALSE, echo=FALSE}
+# Create a scatter plot of total number of beds vs suicide rate
 ggplot(suicideData2016, aes(x = SuicideDeathRate, y = TOTAL_BEDS)) +
+  # Set x axis
   xlim(0, 30) +
-  labs(title = "How number of mental health beds relates to suicide rate", y = "Total number of mental health beds per 100,000 people", x = "Suicide rate per 100,000") +
+  # Add title and axis titles
+  labs(title = "How number of mental health beds relates to suicide rate", 
+       y = "Total number of mental health beds per 100,000 people", 
+       x = "Suicide rate per 100,000") +
   geom_point() +
+  # Add best fit line
   geom_smooth(method = lm)
 ```
 
 <br> Interestingly enough, this plot shows a slight positive correlation between number of mental health hospital beds and suicide rate. This means that more hospital beds is correlated with a higher suicide rate. While this is initially surprising, it does make sense: if there are more suicidal people, there is a higher demand for hospital beds. However, if those hospital beds were really effective in preventing suicide, we would expect increased beds to lower the suicide rate.
-
-
-
-```{r leaflet, echo = FALSE}
-# mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-# mypalette <- colorBin(
-#   palette = c("#ff0000", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
-#   domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
-#   na.color = "transparent",
-#   bins = mybins
-# )
-#
-# # Prepare the text for tooltips:
-# hoverText <- paste(
-#   "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
-#   "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
-#   "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
-#   sep = ""
-# ) %>%
-#   lapply(htmltools::HTML)
-#
-# # Final Map
-# leaflet(leafletSuicideData2016) %>%
-#   addTiles() %>%
-#   setView(lat = 10, lng = 0, zoom = 2) %>%
-#   addPolygons(
-#     fillColor = ~ mypalette(MaleFemaleSuicideRatio),
-#     stroke = TRUE,
-#     fillOpacity = 1,
-#     color = "white",
-#     weight = 1,
-#     label = hoverText,
-#     labelOptions = labelOptions(
-#       style = list("font-weight" = "normal", padding = "3px 8px"),
-#       textsize = "13px",
-#       direction = "auto"
-#     )
-#   ) %>%
-#   addLegend(pal = mypalette, values = ~MaleFemaleSuicideRatio, opacity = 1, title = "Ratio of Male to Female Suicide", position = "bottomleft")
-```
-
-
-```{r worldMap4, echo=FALSE}
-# mybins <- c(0, 1, 2, 5, 7, 10, 12, 15, 20, 25, 30, Inf)
-# mypalette <- colorBin(
-#   palette = c(
-#     "#333399",
-#     "#555599",
-#     "#777799",
-#     "#999999",
-#     "#ffcccc",
-#     "#ffaaaa",
-#     "#ff9999",
-#     "#ff7777",
-#     "#cc5555",
-#     "#aa0000",
-#     "#550000"
-#   ),
-#   domain = leafletSuicideData2016@data$SuicideDeathRate,
-#   na.color = "transparent",
-#   bins = mybins
-# )
-#
-# # Prepare the text for tooltips:
-# hoverText <- paste(
-#   "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
-#   "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
-#   "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
-#   "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
-#   sep = ""
-# ) %>%
-#   lapply(htmltools::HTML)
-#
-# # Final Map
-# leaflet(leafletSuicideData2016) %>%
-#   addTiles() %>%
-#   setView(lat = 10, lng = 0, zoom = 2) %>%
-#   addPolygons(
-#     fillColor = ~ mypalette(SuicideDeathRate),
-#     stroke = TRUE,
-#     fillOpacity = 1,
-#     color = "white",
-#     weight = 1,
-#     label = hoverText,
-#     labelOptions = labelOptions(
-#       style = list("font-weight" = "normal", padding = "3px 8px"),
-#       textsize = "13px",
-#       direction = "auto"
-#     )
-#   ) %>%
-#   addLegend(pal = mypalette, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft")
-```
-
-```{r worldMap3, include = FALSE}
-# mybins <- c(0, 1, 2, 3, 4, 5, 8, 10, 15, 20, 50, 100)
-# mypaletteDeathRate <- colorBin(
-#   palette = c("#ffffff", "#ddddff", "#bbbbff", "#9999ff", "#7777ff", "#5555ff", "#3333cc", "#1111aa", "#000099", "#000055", "#000000"),
-#   domain = leafletSuicideData2016@data$SuicideDeathRate,
-#   na.color = "transparent",
-#   bins = mybins
-# )
-#
-# mybins <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
-#
-# mypaletteMaleFemale <- colorBin(
-#   palette = c("#009900", "#0000ff", "#2200dd", "#4400aa", "#660099", "#880077", "#aa0066", "#bb0055", "#cc0033", "#ee0011", "#ff0000"),
-#   domain = leafletSuicideData2016@data$MaleFemaleSuicideRatio,
-#   na.color = "transparent",
-#   bins = mybins
-# )
-# # Prepare the text for tooltips:
-# hoverText <- paste(
-#   "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
-#   "Total MH Beds: ", leafletSuicideData2016@data$TOTAL_BEDS, "<br/>",
-#   "Suicide Rate: ", round(leafletSuicideData2016@data$SuicideDeathRate, 2), "<br/>",
-#   "Ratio of male to female suicide: ", round(leafletSuicideData2016@data$MaleFemaleSuicideRatio, 2),
-#   sep = ""
-# ) %>%
-#   lapply(htmltools::HTML)
-#
-# # Final Map
-# leaflet(leafletSuicideData2016) %>%
-#   addTiles() %>%
-#   setView(lat = 30, lng = 0, zoom = 1.6) %>%
-#   addPolygons(
-#     fillColor = ~ mypaletteDeathRate(SuicideDeathRate),
-#     stroke = TRUE,
-#     fillOpacity = 0,
-#     opacity = 0,
-#     color = "black",
-#     weight = 1,
-#     label = hoverText,
-#     labelOptions = labelOptions(
-#       style = list("font-weight" = "normal", padding = "3px 8px"),
-#       textsize = "13px",
-#       direction = "auto"
-#     )
-#   ) %>%
-#   addCircles(lat = leafletSuicideData2016@data$LAT, lng = leafletSuicideData2016@data$LON, weight = 1, opacity = 1, fillOpacity = .7, radius = sqrt(leafletSuicideData2016@data$SuicideDeathRate) * 40000, color = "white", fillColor = mypaletteMaleFemale(leafletSuicideData2016@data$MaleFemaleSuicideRatio)) %>%
-#   #  addLegend(pal = mypaletteDeathRate, values = ~SuicideDeathRate, opacity = 1, title = "Suicide Death Rate", position = "bottomleft") %>%
-#   addLegend(pal = mypaletteMaleFemale, values = ~MaleFemaleSuicideRatio, opacity = .7, title = "Male Female Ratio", position = "bottomleft")
-```
-
 
 
 ## A Deeper Dive into the United States
@@ -392,26 +263,7 @@ To create the plot shown in this section, I utilized the state dataset, map data
 ### Analysis
 
 Before looking at the plot, I had no sense of where the suicide rates would be higher within the United States. Although, I had hypothesized that rates would be higher in more densely populated cities do to the fast-paced life that most people live in those areas. Therefore, when I saw the figure below, I was quite surprised to see the results.
-```{r usMapParts, include=FALSE,fig.width = 8, fig.height = 4, fig.align="center"}
-data(state)
-# need a master dataset for state name, and abbreviations
-state_info <- data.frame(
-  Region = state.region,
-  # Match state variable name in map data
-  state = tolower(state.name),
-  # Match state variable name in summary data
-  id = state.abb
-)
-# creating one dataset where all the suicide info will be
-SuicideStateWithInfo <- suicideState %>%
-  # added in state name and abbreviations
-  left_join(state_info, by = "id") %>%
-  # only want the most recent year (one year of data)
-  filter(YEAR == "2019") %>%
-  select(c("YEAR", "id", "RATE", "DEATHS", "Region", "state")) %>%
-  # renaming the id columns so that future joins work
-  rename(region = "Region", state = "id", id = "state")
-rename(state_info, id = "state", state = "id")
+```{r usMapParts, include = FALSE,fig.width = 8, fig.height = 4, fig.align = "center"}
 # this is the object needed for the geospatial representation
 state_map <- maps::map("state", plot = FALSE, fill = TRUE) %>%
   st_as_sf() %>%
@@ -422,15 +274,6 @@ state_map <- maps::map("state", plot = FALSE, fill = TRUE) %>%
 graphs_map <- state_map %>%
   left_join(SuicideStateWithInfo, by = "id")
 
-# shows the map with distribution of total deaths
-# decided to comment it out and not use it because it doesn't show anything but population density
-
-# y <- ggplot(graphs_map, aes(fill = DEATHS, text = paste("State: ", id))) +
-# geom_sf(size = .2, colour = "white") +
-# scale_fill_viridis(option = "magma", direction = -1)
-# theme_void()
-# ggplotly(y, dynamicTicks = TRUE)
-
 # created plot object with us map and have labeled text for the hover feature of plotly
 x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
   geom_sf(size = .2, colour = "white") +
@@ -440,8 +283,8 @@ x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
   theme_void()
 ```
  
-```{r finalUSMap, echo = FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
-# plotting the plot object dynamically
+```{r finalUSMap, echo = FALSE, fig.width = 8, fig.height = 4, fig.align = "center"}
+# plotting the plot object dynamically with n o tick marks
 ggplotly(x, dynamicTicks = TRUE)
 ```
 As you can see above, the states with the highest suicide rates are Wyoming and Montana. Going further, it seems that the cluster around the center of the map (northwest of Texas) have the highest suicide rates by a significant margin. In contrast, the more populated areas of the USA actually have the lowest suicide rates. Places like New York, Massachusetts, California, and most of the Northeast have very low suicide rates compared to the rest of the country. These results were definitely not what i had expected and led me to wonder what led to this. The first thought I had was that these places in Central USA don't have many big cities and likely have less to do leading to more mental health issues. However, as I thought more deeply, I realized that one possible factor could be political orientation of these states. Most of these states are classified as "red" states and hence, have less gun control. Because 3 in 5 gun deaths are by suicide (source: efsgv.org), I wanted to explore if there was a link between gun ownership and the suicide rates displayed on the above map.
@@ -455,22 +298,9 @@ The process of creating this plot was much the same as the plot describing suici
 ### Analysis
 
 While looking at this map, I expected to see most of the South and central USA to have higher gun ownership rates. However, I was also looking to see if there was any correlation between this map and the above map.
-```{r GunMapParts, include=FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
-# creating new dataset with all the information in one place
-gunDataNew <- gunData %>%
-  # capitalization change for join below
-  mutate(state = tolower(State)) %>%
-  left_join(state_info, by = "state") %>%
-  select(id, state, gunOwnership, totalGuns)
-# creating the sf object using the previous one and renaming the id to state
-# to match gunDataNew
-state_map_new <- state_map %>%
-  rename(state = id)
-# creating the final dataset to use for plot
-graphs_map_guns <- state_map_new %>%
-  left_join(gunDataNew, by = "state")
+```{r GunMapParts, include = FALSE, fig.width = 8, fig.height = 4, fig.align = "center"}
 # creating plot object with dynamic text
-y <- ggplot(graphs_map_guns, aes(fill = gunOwnership, text = paste("State: ", state))) +
+y <- ggplot(graphs_map, aes(fill = gunOwnership, text = paste("State: ", id))) +
   geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1) +
   # adding title and legend title
@@ -478,8 +308,8 @@ y <- ggplot(graphs_map_guns, aes(fill = gunOwnership, text = paste("State: ", st
   theme_void()
 ```
 
-```{r finalGunMap, echo= FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
-# plotting object
+```{r finalGunMap, echo = FALSE, fig.width = 8, fig.height = 4, fig.align = "center"}
+# plotting map without longitude/lattitude ticks
 ggplotly(y, dynamicTicks = TRUE)
 ```
 
@@ -489,25 +319,14 @@ ggplotly(y, dynamicTicks = TRUE)
 
   While looking at the suicide rate map and the gun ownership map together, there is some clear overlap that seems to suggest a correlation between these two variables. States like Montana and Wyoming both have the highest gun ownership rates as well as the highest suicide rates. On the other side, states like New Jersey and Massachusetts have the lowest gun ownership rates as well as some of the lowest suicide rates.     To explore this potential relationship further, I created a simple scatterplot to examine the relationship between gun ownership and suicide rate. I created this by using both *gunownership* and *statedata* datasets and then utilizing 'ggplot' to graph the relationship. In addition, I used the 'geom_text' feature to add labels to the plot for each state so that I can see which state is which in the plot.
   
-```{r suicideGun, echo = FALSE, fig.width = 8, fig.height = 5, fig.align="center"}
+```{r suicideGun, echo = FALSE, fig.width = 8, fig.height = 5, fig.align = "center"}
 # wrangling
-suicideGun <- SuicideStateWithInfo %>%
-  # selecting only the 2 important columns for suicide info
-  select(state, RATE) %>%
-  # renaming column for joining
-  rename(id = state) %>%
-  # joining with gun data
-  left_join(gunDataNew, by = "id") %>%
-  # selecting the 3 important variable to graph
-  select(id, RATE, gunOwnership) %>%
-  # renaming for clarity
-  rename(State = id, Rate = RATE)
 # plotting the data with guns on x axis and suicide rates on y
-ggplot(suicideGun, aes(x = gunOwnership, y = Rate)) +
+ggplot(SuicideStateWithInfo, aes(x = gunOwnership, y = RATE)) +
   # adding in points
   geom_point() +
   # adding in labels for each state
-  geom_text(aes(label = State), hjust = 0, vjust = -0.5) +
+  geom_text(aes(label = state), hjust = 0, vjust = -0.5) +
   # adding informative labels
   labs(
     x = "Gun Ownership (Percentage)",
