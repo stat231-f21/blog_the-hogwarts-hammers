@@ -22,12 +22,8 @@ library(rgdal)
 library(leaflet)
 library(RColorBrewer)
 library(widgetframe)
-library(htmltools)
-library(tidyRSS)
 library(wordcloud)
 library(wordcloud2)
-library(tm)
-library(stringr)
 
 # for example code; delete if not needed
 
@@ -43,84 +39,26 @@ knitr::opts_chunk$set(
 options(knitr.kable.NA = "")
 ```
 
-```{r reading-data, eval = TRUE, include = FALSE}
-MHBeds <- read_csv("data/mental-health-hospital.csv", show_col_types = FALSE)
+```{r dataLoading, echo = FALSE, message = FALSE, warning = FALSE}
 suicideRate <- read_csv("data/suicide-death-rates.csv", show_col_types = FALSE)
-sexualViolence <- read_csv("data/NonPartnerSexualViolenceByCountry.csv", show_col_types = FALSE)
-suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
-  rename(id = "STATE")
-maleFemaleRatio <- read_csv("data/Male-Female-Ratio-of-Suicide-Rates.csv")
-gunData <- read_csv("data/gunOwnership.csv")
+
 leafletData <- readOGR(
   dsn = paste0(getwd(), "/data/LeafletData"),
   layer = "TM_WORLD_BORDERS_SIMPL-0.3",
   verbose = FALSE
 )
-```
 
+suicideData <- read.csv("fullSuicideData.csv")
 
-```{r wrangling, include = FALSE}
-# Rename country codes and years and drop unnecessary columns so that all data sets match
-maleFemaleRatio <- maleFemaleRatio %>%
-  mutate(ISO3 = Code)
-suicideRate <- suicideRate %>%
-  mutate(ISO3 = Code)
-MHBeds <- MHBeds %>%
-  select("GHO_DISPLAY", "YEAR", "COUNTRY_CODE", "Number_Beds") %>%
-  mutate(ISO3 = COUNTRY_CODE, Year = YEAR)
-
-# Pull out different bed metrics into separate data sets
-MHBedsInMHHospitals <- MHBeds %>%
-  filter(GHO_DISPLAY == "Beds in mental hospitals (per 100 000 population)") %>%
-  mutate(BEDS_IN_MENTAL_HOSPITALS = Number_Beds) %>%
-  select(Year, ISO3, BEDS_IN_MENTAL_HOSPITALS)
-MHBedsInGeneralHospitals <- MHBeds %>%
-  filter(GHO_DISPLAY == "Beds for mental health in general hospitals (per 100 000 population)") %>%
-  mutate(BEDS_IN_GENERAL_HOSPITALS = Number_Beds) %>%
-  select(Year, ISO3, BEDS_IN_GENERAL_HOSPITALS)
-MHBedsInCommunityHospitals <- MHBeds %>%
-  filter(GHO_DISPLAY == "Beds in community residential facilities (per 100 000 population)") %>%
-  mutate(BEDS_IN_COMMUNITY_FACILITIES = Number_Beds) %>%
-  select(Year, ISO3, BEDS_IN_COMMUNITY_FACILITIES)
-
-# Combine bed data into a single data set and replace NA with 0
-bedData2016 <- full_join(MHBedsInMHHospitals, full_join(MHBedsInGeneralHospitals, MHBedsInCommunityHospitals)) %>%
-  replace_na(list(BEDS_IN_MENTAL_HOSPITALS = 0, BEDS_IN_GENERAL_HOSPITALS = 0, BEDS_IN_COMMUNITY_FACILITIES = 0)) %>%
-  mutate(TOTAL_BEDS = BEDS_IN_MENTAL_HOSPITALS + BEDS_IN_GENERAL_HOSPITALS + BEDS_IN_COMMUNITY_FACILITIES) %>%
-  filter(Year == 2016)
-
-# Join together all data sets into a single data set for display
-suicideData <- full_join(suicideRate, maleFemaleRatio)
-suicideData <- full_join(suicideData, bedData2016)
 suicideData2016 <- suicideData %>%
   filter(Year == "2016")
-write_csv(suicideData, "fullSuicideData.csv")
-maleFemaleRatio2017 <- maleFemaleRatio %>%
-  filter(Year == "2017")
 
-leafletMaleFemaleRatio2017 <- merge(leafletData, maleFemaleRatio2017, by = "ISO3")
 leafletSuicideData2016 <- merge(leafletData, suicideData2016, by = "ISO3")
-```
 
-```{r, include = FALSE}
-# Get all years into one row of the data frame
-wideSuicideData <- NULL
-for (year in 1990:2017) {
-  dataForYear <-
-    suicideData %>%
-    filter(Year == year) %>%
-    select(ISO3, SuicideDeathRate) %>%
-    drop_na()
-  rateName <- paste("Rate", year, sep = "")
-  dataForYear[rateName] <- dataForYear$SuicideDeathRate
-  dataForYear <- dataForYear %>% select("ISO3", rateName)
-  if (is.null(wideSuicideData)) {
-    wideSuicideData <- dataForYear
-  } else {
-    wideSuicideData <- full_join(wideSuicideData, dataForYear, by = c("ISO3"))
-  }
-}
-write_csv(wideSuicideData, "suicideRatesWideYears.csv")
+suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
+  rename(id = "STATE")
+
+gunData <- read_csv("data/gunOwnership.csv")
 ```
 
 ## Motivation
@@ -257,64 +195,12 @@ Although we can't explore all of them, external factors clearly play an importan
 
 ## What does the United States need?
 In order to get an idea of what the United States thinks is needed to improve suicide rates, we created a word cloud. This word cloud shows the most common words in articles that discuss mental health needs in the title by searching a Google news rss feed. 
-```{r, message=FALSE, echo=FALSE, warning=FALSE}
-getNewsWordCloud <- function(startDate, yearCount, interval, searchTerm, wordsToRemove, country) {
-  allTitles <- data.frame()
-  print(startDate)
-  print(yearCount)
-  print(interval)
-  print(searchTerm)
-  print(wordsToRemove)
-  print(country)
-  # Loop over two day periods in 2014 and 2015 to get all headlines. Google RSS feed is limited to 100
-  # headlines, so we will miss articles if we go with longer time periods
 
-  numIntervals <- as.integer(yearCount * 365 / interval)
-
-  for (day in 1:numIntervals) {
-    nextDate <- startDate + interval
-    print(paste("Getting articles from", startDate, "to", nextDate))
-    newsUrl <- URLencode(paste0("https://news.google.com/rss/search?q=", searchTerm, "+after:", startDate, "+before:", nextDate, "&ceid=", country, "&gl=", country))
-    scrapedTitles <- tryCatch(
-      # Some days have no articles. Handle the error so that the scrape doesn't crash
-      error = function(cnd) {
-        return(NA)
-      },
-      scrapedTitles <- newsUrl %>%
-        tidyfeed() %>%
-        select(item_title)
-    )
-
-    print(paste("Got ", nrow(scrapedTitles), "articles"))
-    allTitles <- allTitles %>% rbind(scrapedTitles)
-    startDate <- nextDate
-  }
-  # Remove names of sources
-  allTitles <- allTitles %>%
-    mutate(item_title = gsub(" *-[^-]*$", "", item_title)) %>%
-    mutate(item_title = gsub(" *\\|.*$", "", item_title))
-  processedTitles <- Corpus(VectorSource(allTitles$item_title)) %>%
-    tm_map(stripWhitespace) %>%
-    tm_map(removePunctuation) %>%
-    tm_map(removeNumbers) %>%
-    tm_map(content_transformer(tolower)) %>%
-    tm_map(removeWords, stopwords("english")) %>%
-    tm_map(removeWords, wordsToRemove)
-  # tm_map(removeWords, c("suicide", "news", "times", "suicides"))
-
-  termDocumentMatrix <- TermDocumentMatrix(processedTitles)
-  matrix <- as.matrix(termDocumentMatrix)
-  words <- sort(rowSums(matrix), decreasing = TRUE)
-  wordDataframe <- data.frame(word = names(words), freq = words)
-  wordDataframe
-}
-```
 
 
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
-usMentalHealthNeeds = read.csv('data/USMentalHealthNeedsWords.csv')
-greatBritainMentalHealthNeeds = read.csv('data/GBMentalHealthNeedsWords.csv')
-
+usMentalHealthNeeds <- read.csv("data/USMentalHealthNeedsWords.csv")
+greatBritainMentalHealthNeeds <- read.csv("data/GBMentalHealthNeedsWords.csv")
 ```
 
 
@@ -332,9 +218,8 @@ To create these word clouds, we first had to get years worth of news headlines f
 ### Does having more mental health hospital beds actually correlate with lower suicide rates?
   To explore this relationship we created another scatter plot, this time relating number of hospital beds per country in 2016 to suicide rate per 100,000 in 2016. 
 ```{r, warning=FALSE, message=FALSE, echo=FALSE}
-deathRateNumberBeds <- left_join(suicideData2016, bedData2016)
-ggplot(deathRateNumberBeds, aes(x = SuicideDeathRate, y = TOTAL_BEDS)) +
-  xlim(0,30) +
+ggplot(suicideData2016, aes(x = SuicideDeathRate, y = TOTAL_BEDS)) +
+  xlim(0, 30) +
   labs(title = "How number of mental health beds relates to suicide rate", y = "Total number of mental health beds per 100,000 people", x = "Suicide rate per 100,000") +
   geom_point() +
   geom_smooth(method = lm)
@@ -352,7 +237,7 @@ ggplot(deathRateNumberBeds, aes(x = SuicideDeathRate, y = TOTAL_BEDS)) +
 #   na.color = "transparent",
 #   bins = mybins
 # )
-# 
+#
 # # Prepare the text for tooltips:
 # hoverText <- paste(
 #   "Country: ", leafletSuicideData2016@data$NAME, "<br/>",
@@ -361,7 +246,7 @@ ggplot(deathRateNumberBeds, aes(x = SuicideDeathRate, y = TOTAL_BEDS)) +
 #   sep = ""
 # ) %>%
 #   lapply(htmltools::HTML)
-# 
+#
 # # Final Map
 # leaflet(leafletSuicideData2016) %>%
 #   addTiles() %>%
@@ -509,7 +394,7 @@ To create the plot shown in this section, I utilized the state dataset, map data
 Before looking at the plot, I had no sense of where the suicide rates would be higher within the United States. Although, I had hypothesized that rates would be higher in more densely populated cities do to the fast-paced life that most people live in those areas. Therefore, when I saw the figure below, I was quite surprised to see the results.
 ```{r usMapParts, include=FALSE,fig.width = 8, fig.height = 4, fig.align="center"}
 data(state)
-#need a master dataset for state name, and abbreviations
+# need a master dataset for state name, and abbreviations
 state_info <- data.frame(
   Region = state.region,
   # Match state variable name in map data
@@ -517,40 +402,40 @@ state_info <- data.frame(
   # Match state variable name in summary data
   id = state.abb
 )
-#creating one dataset where all the suicide info will be
+# creating one dataset where all the suicide info will be
 SuicideStateWithInfo <- suicideState %>%
-  #added in state name and abbreviations
+  # added in state name and abbreviations
   left_join(state_info, by = "id") %>%
-  #only want the most recent year (one year of data)
+  # only want the most recent year (one year of data)
   filter(YEAR == "2019") %>%
   select(c("YEAR", "id", "RATE", "DEATHS", "Region", "state")) %>%
-  #renaming the id columns so that future joins work
+  # renaming the id columns so that future joins work
   rename(region = "Region", state = "id", id = "state")
 rename(state_info, id = "state", state = "id")
-#this is the object needed for the geospatial representation
+# this is the object needed for the geospatial representation
 state_map <- maps::map("state", plot = FALSE, fill = TRUE) %>%
   st_as_sf() %>%
-  #changed capitalization for joins
+  # changed capitalization for joins
   rename(id = "ID")
 
-#created the object to be plotted along with the data
+# created the object to be plotted along with the data
 graphs_map <- state_map %>%
   left_join(SuicideStateWithInfo, by = "id")
 
-#shows the map with distribution of total deaths
-#decided to comment it out and not use it because it doesn't show anything but population density
+# shows the map with distribution of total deaths
+# decided to comment it out and not use it because it doesn't show anything but population density
 
-#y <- ggplot(graphs_map, aes(fill = DEATHS, text = paste("State: ", id))) +
-  #geom_sf(size = .2, colour = "white") +
-  #scale_fill_viridis(option = "magma", direction = -1)
-#theme_void()
-#ggplotly(y, dynamicTicks = TRUE)
+# y <- ggplot(graphs_map, aes(fill = DEATHS, text = paste("State: ", id))) +
+# geom_sf(size = .2, colour = "white") +
+# scale_fill_viridis(option = "magma", direction = -1)
+# theme_void()
+# ggplotly(y, dynamicTicks = TRUE)
 
-#created plot object with us map and have labeled text for the hover feature of plotly
+# created plot object with us map and have labeled text for the hover feature of plotly
 x <- ggplot(graphs_map, aes(fill = RATE, text = paste("State: ", id))) +
   geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1) +
-  #adding legend title and title
+  # adding legend title and title
   labs(fill = "Suicide Rate") +
   theme_void()
 ```
@@ -571,32 +456,31 @@ The process of creating this plot was much the same as the plot describing suici
 
 While looking at this map, I expected to see most of the South and central USA to have higher gun ownership rates. However, I was also looking to see if there was any correlation between this map and the above map.
 ```{r GunMapParts, include=FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
-#creating new dataset with all the information in one place
+# creating new dataset with all the information in one place
 gunDataNew <- gunData %>%
-  #capitalization change for join below
+  # capitalization change for join below
   mutate(state = tolower(State)) %>%
   left_join(state_info, by = "state") %>%
   select(id, state, gunOwnership, totalGuns)
-#creating the sf object using the previous one and renaming the id to state
-#to match gunDataNew
+# creating the sf object using the previous one and renaming the id to state
+# to match gunDataNew
 state_map_new <- state_map %>%
   rename(state = id)
-#creating the final dataset to use for plot
+# creating the final dataset to use for plot
 graphs_map_guns <- state_map_new %>%
   left_join(gunDataNew, by = "state")
-#creating plot object with dynamic text
+# creating plot object with dynamic text
 y <- ggplot(graphs_map_guns, aes(fill = gunOwnership, text = paste("State: ", state))) +
   geom_sf(size = .2, colour = "white") +
   scale_fill_viridis(option = "magma", direction = -1) +
-  #adding title and legend title
+  # adding title and legend title
   labs(fill = "Gun Ownership") +
   theme_void()
 ```
 
 ```{r finalGunMap, echo= FALSE, fig.width = 8, fig.height = 4, fig.align="center"}
-#plotting object
+# plotting object
 ggplotly(y, dynamicTicks = TRUE)
-
 ```
 
   While looking at the above map, the first thing I noticed was the two highest states for gun ownership were, by far, Montana and Wyoming again. In addition, in accordance with my prediction, most of the central part of the USA as well as the south had the highest gun ownership rates. States typically classified as 'red" states like Texas, Louisiana, Oklahoma, etc, had significantly higher gun ownership rates than those states classified as "blue" such as California and most of the northeast. Although not the exact same, there are some very clear similarities between this map and the map of suicide rates that may show some correlation that will be further discussed in the next section.
@@ -604,29 +488,32 @@ ggplotly(y, dynamicTicks = TRUE)
 ## Guns and Suicide in the USA
 
   While looking at the suicide rate map and the gun ownership map together, there is some clear overlap that seems to suggest a correlation between these two variables. States like Montana and Wyoming both have the highest gun ownership rates as well as the highest suicide rates. On the other side, states like New Jersey and Massachusetts have the lowest gun ownership rates as well as some of the lowest suicide rates.     To explore this potential relationship further, I created a simple scatterplot to examine the relationship between gun ownership and suicide rate. I created this by using both *gunownership* and *statedata* datasets and then utilizing 'ggplot' to graph the relationship. In addition, I used the 'geom_text' feature to add labels to the plot for each state so that I can see which state is which in the plot.
+  
 ```{r suicideGun, echo = FALSE, fig.width = 8, fig.height = 5, fig.align="center"}
-#wrangling
+# wrangling
 suicideGun <- SuicideStateWithInfo %>%
-  #selecting only the 2 important columns for suicide info
+  # selecting only the 2 important columns for suicide info
   select(state, RATE) %>%
-  #renaming column for joining
+  # renaming column for joining
   rename(id = state) %>%
-  #joining with gun data
+  # joining with gun data
   left_join(gunDataNew, by = "id") %>%
-  #selecting the 3 important variable to graph
+  # selecting the 3 important variable to graph
   select(id, RATE, gunOwnership) %>%
-  #renaming for clarity
+  # renaming for clarity
   rename(State = id, Rate = RATE)
-#plotting the data with guns on x axis and suicide rates on y
+# plotting the data with guns on x axis and suicide rates on y
 ggplot(suicideGun, aes(x = gunOwnership, y = Rate)) +
-  #adding in points
+  # adding in points
   geom_point() +
-  #adding in labels for each state
-  geom_text(aes(label= State), hjust = 0, vjust = -0.5)+
-  #adding informative labels
-  labs(x = "Gun Ownership (Percentage)", 
-       y = "Suicide Rate (per 100,000)",
-       title = "Suicide Rate vs Gun Ownership by US State")
+  # adding in labels for each state
+  geom_text(aes(label = State), hjust = 0, vjust = -0.5) +
+  # adding informative labels
+  labs(
+    x = "Gun Ownership (Percentage)",
+    y = "Suicide Rate (per 100,000)",
+    title = "Suicide Rate vs Gun Ownership by US State"
+  )
 ```  
   By looking at the above plot, There is a clear positive relationship between suicide rate and gun ownership. As Gun ownership increases, so too does the suicide rate in that state. The three states that jump out are Wyoming, Alaska, and Montana. This makes sense based on what we saw in the maps (Alaska was not included). In addition, the lowest points on this graph are Massachusetts and New Jersey which are also the ones we singled out during the observation of the maps. Therefore, There is a clear relationship between gun ownership and Suicide Rate and it is very possible that gun ownership may be one of the contributing factors to higher suicide rates in some states.
   Although these relationships can, by no means, be classified as causal the overwhelming similarities displayed in this plot between gun ownership and suicide rate leads me to believe that there is a strong correlation between these variables. In addition, this deep dive into the United States has showed that one of the potential underlying reasons that some states may have higher suicide rates is gun ownership and by extension, political orientation of the state (due to differing gun control policies).

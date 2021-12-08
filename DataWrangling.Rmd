@@ -1,0 +1,148 @@
+---
+title: "DataWrangling"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(htmltools)
+library(tidyRSS)
+library(tm)
+library(stringr)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r reading-data, eval = TRUE, include = FALSE}
+MHBeds <- read_csv("data/mental-health-hospital.csv", show_col_types = FALSE)
+suicideState <- read_csv("data/StateData.csv", show_col_types = FALSE) %>%
+  rename(id = "STATE")
+maleFemaleRatio <- read_csv("data/Male-Female-Ratio-of-Suicide-Rates.csv")
+suicideRate <- read_csv("data/suicide-death-rates.csv", show_col_types = FALSE)
+```
+
+
+```{r wrangling, include = FALSE}
+# Rename country codes and years and drop unnecessary columns so that all data sets match
+maleFemaleRatio <- maleFemaleRatio %>%
+  mutate(ISO3 = Code)
+suicideRate <- suicideRate %>%
+  mutate(ISO3 = Code)
+MHBeds <- MHBeds %>%
+  select("GHO_DISPLAY", "YEAR", "COUNTRY_CODE", "Number_Beds") %>%
+  mutate(ISO3 = COUNTRY_CODE, Year = YEAR)
+
+# Pull out different bed metrics into separate data sets
+MHBedsInMHHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == "Beds in mental hospitals (per 100 000 population)") %>%
+  mutate(BEDS_IN_MENTAL_HOSPITALS = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_MENTAL_HOSPITALS)
+MHBedsInGeneralHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == "Beds for mental health in general hospitals (per 100 000 population)") %>%
+  mutate(BEDS_IN_GENERAL_HOSPITALS = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_GENERAL_HOSPITALS)
+MHBedsInCommunityHospitals <- MHBeds %>%
+  filter(GHO_DISPLAY == "Beds in community residential facilities (per 100 000 population)") %>%
+  mutate(BEDS_IN_COMMUNITY_FACILITIES = Number_Beds) %>%
+  select(Year, ISO3, BEDS_IN_COMMUNITY_FACILITIES)
+
+# Combine bed data into a single data set and replace NA with 0
+bedData2016 <- full_join(MHBedsInMHHospitals, full_join(MHBedsInGeneralHospitals, MHBedsInCommunityHospitals)) %>%
+  replace_na(list(BEDS_IN_MENTAL_HOSPITALS = 0, BEDS_IN_GENERAL_HOSPITALS = 0, BEDS_IN_COMMUNITY_FACILITIES = 0)) %>%
+  mutate(TOTAL_BEDS = BEDS_IN_MENTAL_HOSPITALS + BEDS_IN_GENERAL_HOSPITALS + BEDS_IN_COMMUNITY_FACILITIES) %>%
+  filter(Year == 2016)
+
+# Join together all data sets into a single data set for display
+suicideData <- full_join(suicideRate, maleFemaleRatio)
+suicideData <- full_join(suicideData, bedData2016)
+write_csv(suicideData, "fullSuicideData.csv")
+
+maleFemaleRatio2017 <- maleFemaleRatio %>%
+  filter(Year == "2017")
+```
+
+
+```{r, include = FALSE}
+# Get all years into one row of the data frame
+wideSuicideData <- NULL
+for (year in 1990:2017) {
+  dataForYear <-
+    suicideData %>%
+    filter(Year == year) %>%
+    select(ISO3, SuicideDeathRate) %>%
+    drop_na()
+  rateName <- paste("Rate", year, sep = "")
+  dataForYear[rateName] <- dataForYear$SuicideDeathRate
+  dataForYear <- dataForYear %>% select("ISO3", rateName)
+  if (is.null(wideSuicideData)) {
+    wideSuicideData <- dataForYear
+  } else {
+    wideSuicideData <- full_join(wideSuicideData, dataForYear, by = c("ISO3"))
+  }
+}
+write_csv(wideSuicideData, "suicideRatesWideYears.csv")
+```
+
+
+```{r, message=FALSE, echo=FALSE, warning=FALSE}
+getNewsWordCloud <- function(startDate, yearCount, interval, searchTerm, wordsToRemove, country) {
+  allTitles <- data.frame()
+  print(startDate)
+  print(yearCount)
+  print(interval)
+  print(searchTerm)
+  print(wordsToRemove)
+  print(country)
+  # Loop over two day periods in 2014 and 2015 to get all headlines. Google RSS feed is limited to 100
+  # headlines, so we will miss articles if we go with longer time periods
+
+  numIntervals <- as.integer(yearCount * 365 / interval)
+
+  for (day in 1:numIntervals) {
+    nextDate <- startDate + interval
+    print(paste("Getting articles from", startDate, "to", nextDate))
+    newsUrl <- URLencode(paste0("https://news.google.com/rss/search?q=", searchTerm, "+after:", startDate, "+before:", nextDate, "&ceid=", country, "&gl=", country))
+    scrapedTitles <- tryCatch(
+      # Some days have no articles. Handle the error so that the scrape doesn't crash
+      error = function(cnd) {
+        return(NA)
+      },
+      scrapedTitles <- newsUrl %>%
+        tidyfeed() %>%
+        select(item_title)
+    )
+
+    print(paste("Got ", nrow(scrapedTitles), "articles"))
+    allTitles <- allTitles %>% rbind(scrapedTitles)
+    startDate <- nextDate
+  }
+  # Remove names of sources
+  allTitles <- allTitles %>%
+    mutate(item_title = gsub(" *-[^-]*$", "", item_title)) %>%
+    mutate(item_title = gsub(" *\\|.*$", "", item_title))
+  processedTitles <- Corpus(VectorSource(allTitles$item_title)) %>%
+    tm_map(stripWhitespace) %>%
+    tm_map(removePunctuation) %>%
+    tm_map(removeNumbers) %>%
+    tm_map(content_transformer(tolower)) %>%
+    tm_map(removeWords, stopwords("english")) %>%
+    tm_map(removeWords, wordsToRemove)
+  # tm_map(removeWords, c("suicide", "news", "times", "suicides"))
+
+  termDocumentMatrix <- TermDocumentMatrix(processedTitles)
+  matrix <- as.matrix(termDocumentMatrix)
+  words <- sort(rowSums(matrix), decreasing = TRUE)
+  wordDataframe <- data.frame(word = names(words), freq = words)
+  wordDataframe
+}
+```
+
+
+```{r}
+usMentalHealthNeeds <- getNewsWordCloud(as.Date('2014-01-01'), 3, 30, "+\"mental health\"+needs", c("mental", "health"),  "US")
+write.csv(usMentalHealthNeeds, 'USMentalHealthNeedsWords.csv')
+greatBritainMentalHealthNeeds <- getNewsWordCloud(as.Date('2014-01-01'), 3, 30, "+\"mental health\"+needs", c("mental", "health"), "GB")
+write.csv(greatBritainMentalHealthNeeds, "GBMentalHealthNeedsWords.csv")
+```
+
